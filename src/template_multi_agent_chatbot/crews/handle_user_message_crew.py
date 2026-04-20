@@ -7,6 +7,7 @@ from crewai_tools import ScrapeWebsiteTool, SerperDevTool
 
 from template_multi_agent_chatbot.events import ConversationalEventBus
 from template_multi_agent_chatbot.tools import (
+    NanoBananaImageEditingTool,
     NanoBananaImageGenerationTool,
     SendMessageToUserTool,
 )
@@ -51,6 +52,10 @@ over being verbose, and you never invent information you are not sure about.""",
             skills=[_SKILLS_PATH],
             tools=[
                 NanoBananaImageGenerationTool(
+                    event_bus=self._event_bus,
+                    source=self._source,
+                ),
+                NanoBananaImageEditingTool(
                     event_bus=self._event_bus,
                     source=self._source,
                 ),
