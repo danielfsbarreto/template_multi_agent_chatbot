@@ -20,7 +20,7 @@ class NanoBananaImageEditingToolInput(BaseModel):
     )
     image_path: str = Field(
         ...,
-        description="Path to the source image to edit (e.g. 'out/140110.png').",
+        description="Path to the source image to edit (e.g. '/tmp/140110.png').",
     )
 
 
@@ -56,19 +56,19 @@ class NanoBananaImageEditingTool(BaseTool):
                 print(part.text)
             elif part.inline_data is not None:
                 image = part.as_image()
-                image.save(f"out/{filename}.png")
+                image.save(f"/tmp/{filename}.png")
 
-                image_bytes = open(f"out/{filename}.png", "rb").read()
+                image_bytes = open(f"/tmp/{filename}.png", "rb").read()
                 image_base64 = base64.b64encode(image_bytes).decode("utf-8")
                 self.event_bus.emit_message_created(
                     self.source,
-                    Message.create(role="tool", content=f"out/{filename}.png"),
+                    Message.create(role="tool", content=f"/tmp/{filename}.png"),
                 )
                 self.event_bus.emit_image_generated(self.source, image_base64)
 
                 return {
                     "output": "Image edited successfully.",
-                    "filename": f"out/{filename}.png",
+                    "filename": f"/tmp/{filename}.png",
                 }
 
             return {"output": "Failed to edit image."}

@@ -42,7 +42,7 @@ def kickoff():
             "conversation_id": "test-conversation",
             "user_message": {
                 "role": "user",
-                "content": "Oi, tudo bem?",
+                "content": "Gera uma imagem de uma banana com o estilo gráfico do Studio Ghibli.",
             },
         }
     )

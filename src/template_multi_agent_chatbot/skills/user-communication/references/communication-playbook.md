@@ -22,7 +22,7 @@ Messages sent to the user, in order:
 2. "Searching for recent Python 3.13 release info now."
 3. "The official python.org release page looks most reliable — reading it for the latest details."
 4. "Got what I need. Now generating your snake mascot."
-5. "Here's the summary: Python 3.13 [… a few sentences with citations …]. Your mascot is ready at `out/generated_image_<uuid>.png` — a friendly cartoon green snake coiled around a coffee mug, flat vector style."
+5. "Here's the summary: Python 3.13 [… a few sentences with citations …]. Your mascot is ready at `/tmp/generated_image_<uuid>.png` — a friendly cartoon green snake coiled around a coffee mug, flat vector style."
 
 Total: 5 messages for 3 tool calls + final answer. That's the target density.
 
