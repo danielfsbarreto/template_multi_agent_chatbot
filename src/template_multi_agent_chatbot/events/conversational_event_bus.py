@@ -13,7 +13,8 @@ class ConversationalEventBus:
         self._flow = flow
         self._message_repo = message_repo
 
-        ConversationalEventListener(id=flow.state.conversation_id)
+    def register_listener(self):
+        ConversationalEventListener(id=self._flow.state.conversation_id)
 
     def emit_message_created(self, source: Callable, message: Message):
         self._flow.state.messages.append(message)

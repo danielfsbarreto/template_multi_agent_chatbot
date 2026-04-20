@@ -19,8 +19,9 @@ class ConversationalFlow(Flow[ConversationalState]):
 
     @start()
     def load_initial_context(self):
-        cid = self.state.conversation_id
+        self.event_bus.register_listener()
 
+        cid = self.state.conversation_id
         self.state.messages = self.message_repo.find_by_conversation(cid)
 
         self.state.messages.append(self.state.user_message)
