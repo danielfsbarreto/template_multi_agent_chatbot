@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CrewAI Chatbot</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="server-icon">C</div>
+        <span class="server-name">CrewAI Chat</span>
+      </div>
+
+      <div class="channel-section">
+        <div class="channel-section-header">
+          <span>CHANNELS</span>
+          <button id="btn-new-channel" class="btn-icon" title="New channel">+</button>
+        </div>
+        <ul id="channel-list" class="channel-list"></ul>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+      <!-- Empty state (no channel selected) -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-state-icon">💬</div>
+        <h2>Welcome to CrewAI Chat</h2>
+        <p>Select a channel or create a new one to start a conversation.</p>
+      </div>
+
+      <!-- Chat view (hidden by default) -->
+      <div id="chat-view" class="chat-view hidden">
+        <header class="chat-header">
+          <span class="hash">#</span>
+          <span id="chat-channel-name" class="chat-channel-name"></span>
+          <button id="btn-delete-channel" class="btn-icon btn-danger" title="Delete channel">🗑</button>
+        </header>
+
+        <div id="messages" class="messages"></div>
+
+        <div id="typing-indicator" class="typing-indicator hidden">
+          <div class="typing-dots">
+            <span></span><span></span><span></span>
+          </div>
+          <span>CrewAI is thinking...</span>
+        </div>
+
+        <form id="message-form" class="message-form">
+          <input
+            type="text"
+            id="message-input"
+            class="message-input"
+            placeholder="Message #channel"
+            autocomplete="off"
+          >
+          <button type="submit" class="btn-send" title="Send">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- New channel modal -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <h3>Create Channel</h3>
+      <form id="new-channel-form">
+        <input
+          type="text"
+          id="new-channel-name"
+          class="modal-input"
+          placeholder="e.g. general"
+          autocomplete="off"
+          maxlength="40"
+          required
+        >
+        <div class="modal-actions">
+          <button type="button" id="btn-cancel-modal" class="btn-secondary">Cancel</button>
+          <button type="submit" class="btn-primary">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

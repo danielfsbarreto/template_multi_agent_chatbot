@@ -1,4 +1,4 @@
-from crewai.events import BaseEventListener
+from crewai.events import BaseEventListener, FlowFinishedEvent, FlowStartedEvent
 from crewai.events.types.llm_events import LLMStreamChunkEvent, LLMThinkingChunkEvent
 
 from template_multi_agent_chatbot.events.clients import Dispatcher
@@ -17,7 +17,13 @@ class ConversationalEventListener(BaseEventListener):
         @crewai_event_bus.on(ImageGenerated)
         @crewai_event_bus.on(LLMStreamChunkEvent)
         @crewai_event_bus.on(LLMThinkingChunkEvent)
+        @crewai_event_bus.on(FlowStartedEvent)
+        @crewai_event_bus.on(FlowFinishedEvent)
         def on_message_created(source, event):
-            event.source_fingerprint = self._id
-            event.fingerprint_metadata = {"id": self._id}
+            if not event.source_fingerprint:
+                event.source_fingerprint = self._id
+
+            if not event.fingerprint_metadata:
+                event.fingerprint_metadata = {"id": self._id}
+
             self._dispatcher.dispatch(event.to_json())

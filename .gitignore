@@ -4,3 +4,7 @@ lib/
 .DS_Store
 AGENTS.md
 out/*.png
+**/db/*.db
+**/db/*.db-wal
+**/db/*.db-shm
+.venv/
