@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from crewai import LLM, Agent, Crew, Process, Task
 
+from template_multi_agent_chatbot.tools import NanoBananaImageGenerationTool
 from template_multi_agent_chatbot.types import Message
 
 
@@ -29,7 +30,8 @@ unnecessary jargon while still being informative.
 
 You are thoughtful and grounded in the conversation history. You prioritize being useful
 over being verbose, and you never invent information you are not sure about.""",
-            llm=LLM(model="gpt-4.1-mini", stream=True),
+            llm=LLM(model="anthropic/claude-haiku-4-5", stream=True),
+            tools=[NanoBananaImageGenerationTool()],
         )
 
     def _task_one(self) -> Task:

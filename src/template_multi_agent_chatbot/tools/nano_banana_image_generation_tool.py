@@ -29,7 +29,7 @@ class NanoBananaImageGenerationTool(BaseTool):
                 print(part.text)
             elif part.inline_data is not None:
                 image = part.as_image()
-                image.save(f"generated_image_{uuid_filename}.png")
+                image.save(f"out/generated_image_{uuid_filename}.png")
 
                 return "Image generated successfully."
 

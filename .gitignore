@@ -3,4 +3,4 @@ __pycache__/
 lib/
 .DS_Store
 AGENTS.md
-out/
+out/*.png

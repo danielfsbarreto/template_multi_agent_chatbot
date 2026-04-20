@@ -19,7 +19,6 @@ class ConversationalFlow(Flow[ConversationalState]):
 
     @listen(and_(load_initial_context, load_event_bus))
     def handle_new_message(self):
-        # message = ConversationalAgent.process_request(self.state.messages)
         message = HandleUserMessageCrew(self.state.messages).execute()
 
         self.event_bus.emit_message_created(self.handle_new_message, message)
@@ -30,7 +29,7 @@ def kickoff():
         inputs={
             "user_message": {
                 "role": "user",
-                "content": "Oi, tudo bem?",
+                "content": "Oi, tudo bem? Me gera uma imagem de uma banana no estilo do Studio Ghibli.",
             },
         }
     )
