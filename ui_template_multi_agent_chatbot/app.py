@@ -123,11 +123,14 @@ def send_message(channel_id):
         },
     )
 
-    kickoff_inputs = {
-        "conversation_id": channel["conversation_id"],
-        "user_message": {"role": "user", "content": content},
+    kickoff_body = {
+        "inputs": {
+            "conversation_id": channel["conversation_id"],
+            "user_message": {"role": "user", "content": content},
+        },
     }
 
+    app.logger.info("Kickoff body: %s", json.dumps(kickoff_body, default=str))
     app.logger.info(
         "Kickoff → conversation_id=%s content=%s",
         channel["conversation_id"],
@@ -139,9 +142,13 @@ def send_message(channel_id):
             resp = http_requests.post(
                 f"{DEPLOYMENT_URL}/kickoff",
                 headers=_crewai_headers(),
-                json={"inputs": kickoff_inputs},
+                json=kickoff_body,
                 timeout=30,
             )
+            if not resp.ok:
+                app.logger.error(
+                    "Kickoff HTTP %s: %s", resp.status_code, resp.text[:500],
+                )
             resp.raise_for_status()
             result = resp.json()
             app.logger.info("Kickoff OK: %s", result)
@@ -237,6 +244,7 @@ def webhook():
 
     event_type = payload.get("type")
     event_id = payload.get("event_id")
+    emission_sequence = payload.get("emission_sequence", 0)
     fingerprint_metadata = payload.get("fingerprint_metadata") or {}
     conversation_id = fingerprint_metadata.get("conversation_id")
 
@@ -261,10 +269,22 @@ def webhook():
     channel_id = channel["id"]
 
     if event_type == "agent_execution_started":
-        _broadcast_to_channel(channel_id, {"type": "agent_execution_started"})
+        _broadcast_to_channel(
+            channel_id,
+            {
+                "type": "agent_execution_started",
+                "seq": emission_sequence,
+            },
+        )
 
     elif event_type == "agent_execution_completed":
-        _broadcast_to_channel(channel_id, {"type": "agent_execution_completed"})
+        _broadcast_to_channel(
+            channel_id,
+            {
+                "type": "agent_execution_completed",
+                "seq": emission_sequence,
+            },
+        )
 
     elif event_type == "message_created":
         result = payload.get("result", {})
@@ -284,6 +304,7 @@ def webhook():
                 {
                     "type": "message_created",
                     "message": msg,
+                    "seq": emission_sequence,
                 },
             )
 
@@ -304,6 +325,7 @@ def webhook():
                 {
                     "type": "image_generated",
                     "message": msg,
+                    "seq": emission_sequence,
                 },
             )
 

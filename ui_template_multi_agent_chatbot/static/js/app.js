@@ -10,8 +10,6 @@
   let eventSource = null;
   let isWaitingForReply = false;
 
-  // Track event_ids we've already rendered this session to avoid duplicating
-  // messages that were both loaded from history AND pushed via SSE.
   const renderedEventIds = new Set();
 
   // ---------------------------------------------------------------------------
@@ -80,12 +78,13 @@
     $chatView.classList.remove("hidden");
     $chatChannelName.textContent = ch.name;
     $messageInput.placeholder = `Message #${ch.name}`;
-    $messages.innerHTML = "";
+    $messages.querySelectorAll(".message").forEach((el) => el.remove());
 
     (ch.messages || []).forEach((msg) => renderMessage(msg));
     scrollToBottom();
     subscribeSSE(channelId);
     setTyping(false);
+    $messageInput.focus();
   }
 
   // ---------------------------------------------------------------------------
@@ -119,7 +118,7 @@
 
       renderMessage(msg);
       scrollToBottom();
-    } else if (data.type === "agent_execution_started") {
+    } else if (data.type === "kickoff_started") {
       setTyping(true);
     } else if (data.type === "agent_execution_completed") {
       setTyping(false);
@@ -151,10 +150,10 @@
     if (msg.event_type === "image_generated" && msg.image_base64) {
       contentHtml = `<img class="message-image" src="data:image/png;base64,${msg.image_base64}" alt="Generated image" loading="lazy">`;
       if (msg.content) {
-        contentHtml = `<div class="message-content">${escapeHtml(msg.content)}</div>` + contentHtml;
+        contentHtml = `<div class="message-content">${renderContent(msg)}</div>` + contentHtml;
       }
     } else {
-      contentHtml = `<div class="message-content">${escapeHtml(msg.content)}</div>`;
+      contentHtml = `<div class="message-content">${renderContent(msg)}</div>`;
     }
 
     div.innerHTML = `
@@ -168,7 +167,10 @@
       </div>
     `;
 
-    $messages.appendChild(div);
+    $messages.insertBefore(div, $typingIndicator);
+
+    const img = div.querySelector(".message-image");
+    if (img) img.addEventListener("load", scrollToBottom);
   }
 
   function scrollToBottom() {
@@ -193,7 +195,6 @@
     if (!content || !activeChannelId) return;
 
     $messageInput.value = "";
-    setTyping(true);
 
     try {
       await api(`/api/channels/${activeChannelId}/messages`, {
@@ -201,7 +202,6 @@
         body: JSON.stringify({ content }),
       });
     } catch (err) {
-      setTyping(false);
       showError("Failed to send message");
     }
   });
@@ -261,6 +261,12 @@
   // ---------------------------------------------------------------------------
   // Utilities
   // ---------------------------------------------------------------------------
+
+  function renderContent(msg) {
+    if (!msg.content) return "";
+    if (msg.role === "user") return escapeHtml(msg.content);
+    return marked.parse(msg.content, { breaks: true });
+  }
 
   function escapeHtml(str) {
     if (!str) return "";

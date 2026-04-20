@@ -42,13 +42,13 @@
           <button id="btn-delete-channel" class="btn-icon btn-danger" title="Delete channel">🗑</button>
         </header>
 
-        <div id="messages" class="messages"></div>
-
-        <div id="typing-indicator" class="typing-indicator hidden">
-          <div class="typing-dots">
-            <span></span><span></span><span></span>
+        <div id="messages" class="messages">
+          <div id="typing-indicator" class="typing-indicator hidden">
+            <div class="typing-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span>CrewAI is thinking...</span>
           </div>
-          <span>CrewAI is thinking...</span>
         </div>
 
         <form id="message-form" class="message-form">
@@ -93,6 +93,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="/static/js/app.js"></script>
 </body>
 </html>
