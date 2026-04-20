@@ -17,7 +17,7 @@ class ConversationalEventBus:
         ConversationalEventListener(id=self._flow.state.conversation_id)
 
     def emit_message_created(self, source: Callable, message: Message):
-        self._flow.state.messages.append(message)
+        self._flow.messages.append(message)
         self._message_repo.add(self._flow.state.conversation_id, message)
 
         crewai_event_bus.emit(

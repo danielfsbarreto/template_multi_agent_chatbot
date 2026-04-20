@@ -14,6 +14,7 @@ class ConversationalFlow(Flow[ConversationalState]):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        self.messages: list = []
         self.message_repo = MessageRepository()
         self.event_bus = ConversationalEventBus(self, self.message_repo)
 
@@ -24,14 +25,14 @@ class ConversationalFlow(Flow[ConversationalState]):
         cid = self.state.conversation_id
         user_message = self.state.user_message
 
-        self.state.messages = self.message_repo.find_by_conversation(cid)
-        self.state.messages.append(user_message)
+        self.messages = self.message_repo.find_by_conversation(cid)
+        self.messages.append(user_message)
         self.message_repo.add(cid, user_message)
 
     @listen(load_initial_context)
     def handle_new_message(self):
         HandleUserMessageCrew(
-            messages=self.state.messages,
+            messages=self.messages,
             event_bus=self.event_bus,
             source=self.handle_new_message,
         ).execute()
