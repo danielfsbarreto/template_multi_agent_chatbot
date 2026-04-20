@@ -119,9 +119,9 @@
 
       renderMessage(msg);
       scrollToBottom();
-    } else if (data.type === "flow_started") {
+    } else if (data.type === "agent_execution_started") {
       setTyping(true);
-    } else if (data.type === "flow_finished") {
+    } else if (data.type === "agent_execution_completed") {
       setTyping(false);
     } else if (data.type === "kickoff_error") {
       setTyping(false);
@@ -134,13 +134,17 @@
   // ---------------------------------------------------------------------------
 
   function renderMessage(msg) {
+    if (msg.role === "tool") return;
     if (msg.event_id) renderedEventIds.add(msg.event_id);
 
     const div = document.createElement("div");
     div.className = "message";
 
     const roleLabel = msg.role === "user" ? "You" : msg.role === "assistant" ? "CrewAI" : "Tool";
-    const avatarLetter = msg.role === "user" ? "U" : msg.role === "assistant" ? "A" : "T";
+    const isCrewAI = msg.role === "assistant" || msg.role === "tool";
+    const avatarHtml = isCrewAI
+      ? '<img src="/static/img/crewai-logo.svg" alt="CrewAI" class="avatar-logo">'
+      : "U";
     const ts = formatTimestamp(msg.timestamp);
 
     let contentHtml = "";
@@ -154,7 +158,7 @@
     }
 
     div.innerHTML = `
-      <div class="message-avatar ${msg.role}">${avatarLetter}</div>
+      <div class="message-avatar ${msg.role}">${avatarHtml}</div>
       <div class="message-body">
         <div class="message-header">
           <span class="message-author ${msg.role}">${roleLabel}</span>

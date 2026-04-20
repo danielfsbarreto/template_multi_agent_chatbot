@@ -22,10 +22,11 @@ class ConversationalFlow(Flow[ConversationalState]):
         self.event_bus.register_listener()
 
         cid = self.state.conversation_id
-        self.state.messages = self.message_repo.find_by_conversation(cid)
+        user_message = self.state.user_message
 
-        self.state.messages.append(self.state.user_message)
-        self.message_repo.add(cid, self.state.user_message)
+        self.state.messages = self.message_repo.find_by_conversation(cid)
+        self.state.messages.append(user_message)
+        self.message_repo.add(cid, user_message)
 
     @listen(load_initial_context)
     def handle_new_message(self):

@@ -4,13 +4,14 @@ import os
 import queue
 import threading
 
+import db
 import requests as http_requests
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request
 
-import db
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
 dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 load_dotenv(dotenv_path)
@@ -57,6 +58,7 @@ def _crewai_headers():
 # Pages
 # ---------------------------------------------------------------------------
 
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -65,6 +67,7 @@ def index():
 # ---------------------------------------------------------------------------
 # Channel API
 # ---------------------------------------------------------------------------
+
 
 @app.route("/api/channels", methods=["GET"])
 def list_channels():
@@ -99,6 +102,7 @@ def delete_channel(channel_id):
 # Messages / Kickoff
 # ---------------------------------------------------------------------------
 
+
 @app.route("/api/channels/<channel_id>/messages", methods=["POST"])
 def send_message(channel_id):
     channel = db.get_channel(channel_id)
@@ -111,10 +115,13 @@ def send_message(channel_id):
         return jsonify({"error": "content is required"}), 400
 
     msg = db.add_message(channel_id, role="user", content=content)
-    _broadcast_to_channel(channel_id, {
-        "type": "message_created",
-        "message": msg,
-    })
+    _broadcast_to_channel(
+        channel_id,
+        {
+            "type": "message_created",
+            "message": msg,
+        },
+    )
 
     kickoff_inputs = {
         "conversation_id": channel["conversation_id"],
@@ -123,7 +130,8 @@ def send_message(channel_id):
 
     app.logger.info(
         "Kickoff → conversation_id=%s content=%s",
-        channel["conversation_id"], content[:80],
+        channel["conversation_id"],
+        content[:80],
     )
 
     def _do_kickoff():
@@ -137,16 +145,22 @@ def send_message(channel_id):
             resp.raise_for_status()
             result = resp.json()
             app.logger.info("Kickoff OK: %s", result)
-            _broadcast_to_channel(channel_id, {
-                "type": "kickoff_started",
-                "kickoff_id": result.get("kickoff_id"),
-            })
+            _broadcast_to_channel(
+                channel_id,
+                {
+                    "type": "kickoff_started",
+                    "kickoff_id": result.get("kickoff_id"),
+                },
+            )
         except Exception as e:
             app.logger.error("Kickoff failed: %s", e)
-            _broadcast_to_channel(channel_id, {
-                "type": "kickoff_error",
-                "error": str(e),
-            })
+            _broadcast_to_channel(
+                channel_id,
+                {
+                    "type": "kickoff_error",
+                    "error": str(e),
+                },
+            )
 
     threading.Thread(target=_do_kickoff, daemon=True).start()
 
@@ -156,6 +170,7 @@ def send_message(channel_id):
 # ---------------------------------------------------------------------------
 # Status proxy
 # ---------------------------------------------------------------------------
+
 
 @app.route("/api/channels/<channel_id>/status/<kickoff_id>", methods=["GET"])
 def get_status(channel_id, kickoff_id):
@@ -174,6 +189,7 @@ def get_status(channel_id, kickoff_id):
 # ---------------------------------------------------------------------------
 # SSE
 # ---------------------------------------------------------------------------
+
 
 @app.route("/api/channels/<channel_id>/events", methods=["GET"])
 def channel_events(channel_id):
@@ -211,6 +227,7 @@ def channel_events(channel_id):
 # Webhook receiver (from webhook.site XHR forward)
 # ---------------------------------------------------------------------------
 
+
 @app.route("/api/webhook", methods=["POST"])
 def webhook():
     try:
@@ -219,31 +236,35 @@ def webhook():
         return "bad json", 400
 
     event_type = payload.get("type")
-    source_fingerprint = payload.get("source_fingerprint")
     event_id = payload.get("event_id")
+    fingerprint_metadata = payload.get("fingerprint_metadata") or {}
+    conversation_id = fingerprint_metadata.get("conversation_id")
 
     app.logger.info(
-        "Webhook received: type=%s fingerprint=%s event_id=%s",
-        event_type, source_fingerprint, event_id,
+        "Webhook received: type=%s conversation_id=%s event_id=%s",
+        event_type,
+        conversation_id,
+        event_id,
     )
 
-    if not source_fingerprint:
-        return jsonify({"status": "ignored", "reason": "no source_fingerprint"}), 200
+    if not conversation_id:
+        return jsonify({"status": "ignored", "reason": "no conversation_id"}), 200
 
-    channel = db.get_channel_by_conversation_id(source_fingerprint)
+    channel = db.get_channel_by_conversation_id(conversation_id)
     if not channel:
         app.logger.warning(
-            "No channel found for source_fingerprint=%s", source_fingerprint,
+            "No channel found for conversation_id=%s",
+            conversation_id,
         )
         return jsonify({"status": "ignored", "reason": "unknown conversation"}), 200
 
     channel_id = channel["id"]
 
-    if event_type == "flow_started":
-        _broadcast_to_channel(channel_id, {"type": "flow_started"})
+    if event_type == "agent_execution_started":
+        _broadcast_to_channel(channel_id, {"type": "agent_execution_started"})
 
-    elif event_type == "flow_finished":
-        _broadcast_to_channel(channel_id, {"type": "flow_finished"})
+    elif event_type == "agent_execution_completed":
+        _broadcast_to_channel(channel_id, {"type": "agent_execution_completed"})
 
     elif event_type == "message_created":
         result = payload.get("result", {})
@@ -258,10 +279,13 @@ def webhook():
             event_id=event_id,
         )
         if msg:
-            _broadcast_to_channel(channel_id, {
-                "type": "message_created",
-                "message": msg,
-            })
+            _broadcast_to_channel(
+                channel_id,
+                {
+                    "type": "message_created",
+                    "message": msg,
+                },
+            )
 
     elif event_type == "image_generated":
         result = payload.get("result", {})
@@ -275,10 +299,13 @@ def webhook():
             event_id=event_id,
         )
         if msg:
-            _broadcast_to_channel(channel_id, {
-                "type": "image_generated",
-                "message": msg,
-            })
+            _broadcast_to_channel(
+                channel_id,
+                {
+                    "type": "image_generated",
+                    "message": msg,
+                },
+            )
 
     return jsonify({"status": "ok"}), 200
 
@@ -288,4 +315,9 @@ def webhook():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5005)), debug=True, threaded=True)
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5005)),
+        debug=True,
+        threaded=True,
+    )

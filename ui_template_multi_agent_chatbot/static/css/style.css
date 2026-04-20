@@ -78,13 +78,10 @@ html, body {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--accent);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 14px;
-  color: #fff;
   flex-shrink: 0;
 }
 
@@ -172,6 +169,13 @@ html, body {
   background: var(--bg-chat);
 }
 
+.chat-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .hidden { display: none !important; }
 
 /* Empty state */
@@ -241,8 +245,15 @@ html, body {
   color: #fff;
 }
 .message-avatar.user      { background: var(--avatar-user); }
-.message-avatar.assistant { background: var(--avatar-assistant); }
-.message-avatar.tool      { background: var(--avatar-tool); }
+.message-avatar.assistant,
+.message-avatar.tool      { background: transparent; }
+
+.message-avatar .avatar-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+}
 
 .message-body {
   flex: 1;
@@ -261,8 +272,8 @@ html, body {
   font-size: 14px;
 }
 .message-author.user      { color: #7289da; }
-.message-author.assistant { color: #57f287; }
-.message-author.tool      { color: #eb459e; }
+.message-author.assistant { color: rgb(237, 103, 61); }
+.message-author.tool      { color: rgb(237, 103, 61); }
 
 .message-timestamp {
   font-size: 11px;
@@ -322,6 +333,7 @@ html, body {
   padding: 0 16px 16px;
   gap: 8px;
   flex-shrink: 0;
+  margin-top: auto;
 }
 
 .message-input {
