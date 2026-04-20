@@ -29,6 +29,18 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# ── Load .env ─────────────────────────────────────────────────────────────────
+set -a
+source "$ROOT_DIR/.env"
+set +a
+
+# ── Wake up AMP automation ───────────────────────────────────────────────────
+echo "Waking up AMP automation..."
+curl -sf -o /dev/null -X GET "$DEPLOYMENT_URL/inputs" \
+  -H "Authorization: Bearer $DEPLOYMENT_KEY" \
+  && echo "AMP is awake." \
+  || echo "Warning: could not reach AMP (will retry on first message)."
+
 # ── Dependencies via uv ──────────────────────────────────────────────────────
 echo "Installing dependencies..."
 uv pip install -q -e "$ROOT_DIR" --python "$(which python3)"

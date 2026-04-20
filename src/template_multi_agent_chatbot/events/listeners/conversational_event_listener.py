@@ -24,6 +24,6 @@ class ConversationalEventListener(BaseEventListener):
                 event.source_fingerprint = self._id
 
             if not event.fingerprint_metadata:
-                event.fingerprint_metadata = {"id": self._id}
+                event.fingerprint_metadata = {"conversation_id": self._id}
 
             self._dispatcher.dispatch(event.to_json())
