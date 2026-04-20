@@ -11,15 +11,13 @@ class ConversationalEventBus:
     def __init__(self, flow: object):
         self._id = flow.state.id
 
-        ConversationalEventListener()
+        ConversationalEventListener(id=self._id)
 
     def emit_message_created(self, source: Callable, message: Message):
         crewai_event_bus.emit(
             source=source,
             event=MessageCreated(
-                source_fingerprint=self._id,
                 source_type=source.__name__,
-                fingerprint_metadata={"id": self._id},
                 result={"message": message.model_dump()},
             ),
         )

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from crewai import LLM, Agent
 
+from template_multi_agent_chatbot.tools import NanoBananaImageGenerationTool
 from template_multi_agent_chatbot.types import Message
 
 
@@ -29,8 +30,9 @@ class ConversationalAgent:
 
             You are thoughtful and grounded in the conversation history. You prioritize being useful
             over being verbose, and you never invent information you are not sure about.""",
-            llm=LLM(model="gemini/gemini-3-flash-preview", stream=True),
-            verbose=True,
+            llm=LLM(model="gpt-4.1-mini", stream=True),
+            # llm=LLM(model="gemini/gemini-3-flash-preview", stream=True),
+            tools=[NanoBananaImageGenerationTool()],
         )
 
     @classmethod

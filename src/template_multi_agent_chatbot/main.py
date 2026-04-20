@@ -2,7 +2,7 @@
 
 from crewai.flow import Flow, and_, listen, persist, start
 
-from template_multi_agent_chatbot.agents import ConversationalAgent
+from template_multi_agent_chatbot.crews import HandleUserMessageCrew
 from template_multi_agent_chatbot.events import ConversationalEventBus
 from template_multi_agent_chatbot.types import ConversationalState
 
@@ -19,7 +19,9 @@ class ConversationalFlow(Flow[ConversationalState]):
 
     @listen(and_(load_initial_context, load_event_bus))
     def handle_new_message(self):
-        message = ConversationalAgent.process_request(self.state.messages)
+        # message = ConversationalAgent.process_request(self.state.messages)
+        message = HandleUserMessageCrew(self.state.messages).execute()
+
         self.event_bus.emit_message_created(self.handle_new_message, message)
 
 
@@ -28,7 +30,7 @@ def kickoff():
         inputs={
             "user_message": {
                 "role": "user",
-                "content": "Oi, como vai? Que LLM é você?",
+                "content": "Oi, tudo bem?",
             },
         }
     )
