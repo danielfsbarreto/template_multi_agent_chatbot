@@ -1,16 +1,32 @@
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 from crewai import LLM, Agent, Crew, Process, Task
+from crewai_tools import ScrapeWebsiteTool, SerperDevTool
 
-from template_multi_agent_chatbot.tools import NanoBananaImageGenerationTool
+from template_multi_agent_chatbot.events import ConversationalEventBus
+from template_multi_agent_chatbot.tools import (
+    NanoBananaImageGenerationTool,
+    SendMessageToUserTool,
+)
 from template_multi_agent_chatbot.types import Message
+
+_SKILLS_PATH = str(Path(__file__).resolve().parent.parent / "skills")
 
 
 class HandleUserMessageCrew:
     _NEWLINE = "\n"
 
-    def __init__(self, messages: list[Message]):
+    def __init__(
+        self,
+        messages: list[Message],
+        event_bus: ConversationalEventBus,
+        source: Any,
+    ):
         self._messages = messages
+        self._event_bus = event_bus
+        self._source = source
 
     def _conversational_agent(self) -> Agent:
         return Agent(
@@ -30,8 +46,21 @@ unnecessary jargon while still being informative.
 
 You are thoughtful and grounded in the conversation history. You prioritize being useful
 over being verbose, and you never invent information you are not sure about.""",
-            llm=LLM(model="anthropic/claude-haiku-4-5", stream=True),
-            tools=[NanoBananaImageGenerationTool()],
+            # TODO: Enable streaming to compare performance
+            llm=LLM(model="anthropic/claude-haiku-4-5"),
+            skills=[_SKILLS_PATH],
+            tools=[
+                NanoBananaImageGenerationTool(
+                    event_bus=self._event_bus,
+                    source=self._source,
+                ),
+                SerperDevTool(),
+                ScrapeWebsiteTool(),
+                SendMessageToUserTool(
+                    event_bus=self._event_bus,
+                    source=self._source,
+                ),
+            ],
         )
 
     def _task_one(self) -> Task:
@@ -52,7 +81,15 @@ KEY RULES:
 - Stay grounded in the conversation history; do not invent prior context
 - Be concise and clear; avoid unnecessary filler
 - Ask a focused clarification question only if the request is genuinely ambiguous
-- Respond in the same language the user is using""",
+- Respond in the same language the user is using
+- You MUST use the "Send Message to User" tool for every message the user should see;
+  the user does not see your task output or internal reasoning
+- Over-communicate. Before EVERY other tool call (image generation, web search,
+  scrape, etc.) first send a message describing what you are about to do. A silent
+  tool call is a bug
+- Expected rhythm: acknowledgement → intent-before-each-tool-call → final answer
+- Many distinct messages, no duplicates. Never repeat the same content; each message
+  must carry new information""",
             agent=self._conversational_agent(),
         )
 
@@ -64,5 +101,5 @@ KEY RULES:
             verbose=True,
         )
 
-    def execute(self) -> str:
-        return Message.create(content=self._crew().kickoff().raw)
+    def execute(self) -> None:
+        self._crew().kickoff()

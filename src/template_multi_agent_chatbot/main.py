@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from crewai.flow import Flow, and_, listen, persist, start
+from crewai.flow import Flow, listen, persist, start
 
 from template_multi_agent_chatbot.crews import HandleUserMessageCrew
 from template_multi_agent_chatbot.events import ConversationalEventBus
@@ -9,19 +9,21 @@ from template_multi_agent_chatbot.types import ConversationalState
 
 @persist()
 class ConversationalFlow(Flow[ConversationalState]):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.event_bus = ConversationalEventBus(self)
+
     @start()
     def load_initial_context(self):
         self.state.messages.append(self.state.user_message)
 
-    @start()
-    def load_event_bus(self):
-        self.event_bus = ConversationalEventBus(self)
-
-    @listen(and_(load_initial_context, load_event_bus))
+    @listen(load_initial_context)
     def handle_new_message(self):
-        message = HandleUserMessageCrew(self.state.messages).execute()
-
-        self.event_bus.emit_message_created(self.handle_new_message, message)
+        HandleUserMessageCrew(
+            messages=self.state.messages,
+            event_bus=self.event_bus,
+            source=self.handle_new_message,
+        ).execute()
 
 
 def kickoff():
@@ -29,7 +31,7 @@ def kickoff():
         inputs={
             "user_message": {
                 "role": "user",
-                "content": "Oi, tudo bem? Me gera uma imagem de uma banana no estilo do Studio Ghibli.",
+                "content": "Oi, tudo bem?",
             },
         }
     )

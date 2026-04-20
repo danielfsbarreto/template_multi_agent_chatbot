@@ -2,7 +2,7 @@ from crewai.events import BaseEventListener
 from crewai.events.types.llm_events import LLMStreamChunkEvent, LLMThinkingChunkEvent
 
 from template_multi_agent_chatbot.events.clients import Dispatcher
-from template_multi_agent_chatbot.events.types import MessageCreated
+from template_multi_agent_chatbot.events.types import ImageGenerated, MessageCreated
 
 
 class ConversationalEventListener(BaseEventListener):
@@ -14,6 +14,7 @@ class ConversationalEventListener(BaseEventListener):
 
     def setup_listeners(self, crewai_event_bus):
         @crewai_event_bus.on(MessageCreated)
+        @crewai_event_bus.on(ImageGenerated)
         @crewai_event_bus.on(LLMStreamChunkEvent)
         @crewai_event_bus.on(LLMThinkingChunkEvent)
         def on_message_created(source, event):
