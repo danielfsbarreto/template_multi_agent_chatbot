@@ -1,3 +1,4 @@
-from .handle_user_message_crew import HandleUserMessageCrew
+from .image_creation_crew import ImageCreationCrew
+from .internet_search_crew import InternetSearchCrew
 
-__all__ = ["HandleUserMessageCrew"]
+__all__ = ["ImageCreationCrew", "InternetSearchCrew"]

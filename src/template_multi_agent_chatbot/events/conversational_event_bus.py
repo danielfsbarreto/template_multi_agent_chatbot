@@ -10,9 +10,7 @@ from template_multi_agent_chatbot.types import Message
 class ConversationalEventBus:
     def __init__(self, flow: object):
         self._flow = flow
-
-    def register_listener(self):
-        ConversationalEventListener(id=self._flow.state.id)
+        ConversationalEventListener(id=flow.state.id)
 
     def emit_message_created(self, source: Callable, message: Message):
         self._flow.state.messages.append(message)

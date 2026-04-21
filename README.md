@@ -7,38 +7,18 @@ A conversational chatbot built with [CrewAI Flows](https://docs.crewai.com), dep
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Browser (vanilla HTML/CSS/JS)                                  │
-│  ├── Renders chat channels, messages, images, markdown          │
-│  ├── Sends messages via REST → Flask                            │
-│  └── Receives real-time updates via SSE ← Flask                 │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ HTTP
-┌────────────────────────▼────────────────────────────────────────┐
-│  Flask UI Server  (ui_template_multi_agent_chatbot/)            │
-│  ├── Manages channels & messages in SQLite                      │
-│  ├── Proxies /kickoff requests to CrewAI AMP                    │
-│  ├── Receives webhook events, broadcasts them as SSE            │
-│  └── Exposed publicly via ngrok                                 │
-└──────┬──────────────────────────────────────────┬───────────────┘
-       │ POST /kickoff                            ▲ POST /api/webhook
-       ▼                                          │
-┌──────────────────┐                   ┌──────────┴───────────┐
-│  CrewAI AMP      │───events─────────▶│  webhook.site        │
-│  (deployed flow) │                   │  (XHR redirect)      │
-└──────────────────┘                   └──────────────────────┘
-```
+![CrewAI Multi-Agent Chatbot Architecture](architecture_diagram.png)
 
 ### Request lifecycle
 
 1. User types a message in the browser.
 2. Flask saves it to SQLite, returns `202`, and fires a background `POST /kickoff` to AMP with the channel's `conversation_id` as the flow state `id` + `user_message`.
-3. AMP runs the `ConversationalFlow` — `@persist()` restores the state (including prior `messages`) using the flow's `id`, appends the new user message, and hands off to the `HandleUserMessageCrew`.
-4. The crew's agent reasons over the conversation and calls tools (`SendMessageToUser`, `NanoBananaImageGeneration`, etc.). Each tool emits events through the `ConversationalEventBus`.
-5. The `ConversationalEventListener` catches those events, stamps them with `conversation_id`, and dispatches them to `webhook.site` via the `Dispatcher` client.
-6. `webhook.site` XHR-redirects each event to the Flask server's `/api/webhook` endpoint.
-7. Flask persists `message_created` / `image_generated` payloads to SQLite and broadcasts all events to connected browsers via SSE.
+3. AMP runs the `ConversationalFlow` — `@persist()` restores the state (including prior `messages`) using the flow's `id`, appends the new user message, and hands off to the `MessageClassifierAgent`.
+4. The classifier categorizes the message and either responds directly (for simple queries) or routes the flow to the `ImageCreationCrew` or `InternetSearchCrew`.
+5. The active agent reasons over the conversation and calls tools (`SendMessageToUser`, `NanoBananaImageGeneration`, etc.). Each tool emits events through the `ConversationalEventBus`.
+6. The `ConversationalEventListener` catches those events, stamps them with `conversation_id`, and dispatches them to `webhook.site` via the `Dispatcher` client.
+7. `webhook.site` XHR-redirects each event to the Flask server's `/api/webhook` endpoint.
+8. Flask persists `message_created` / `image_generated` payloads to SQLite and broadcasts all events to connected browsers via SSE.
 
 ## Back-End (`src/template_multi_agent_chatbot/`)
 
@@ -47,19 +27,32 @@ A conversational chatbot built with [CrewAI Flows](https://docs.crewai.com), dep
 `ConversationalFlow` is a CrewAI `Flow[ConversationalState]` with two steps:
 
 
-| Step                   | Decorator                       | What it does                                                                                               |
-| ---------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `load_initial_context` | `@start()`                      | Registers the event listener and appends the new user message to state. |
-| `handle_new_message`   | `@listen(load_initial_context)` | Instantiates and executes the `HandleUserMessageCrew`.                  |
+| Step                   | Decorator                                                                    | What it does                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `load_initial_context` | `@start()`                                                                   | Registers the event listener and appends the new user message to state.                                    |
+| `classify_message`     | `@router(load_initial_context)`                                              | Runs `MessageClassifierAgent` to determine intent ("SIMPLE", "IMAGE_CREATION_UPDATE", "INTERNET_SEARCH").  |
+| `handle_image_creation`| `@listen("IMAGE_CREATION_UPDATE")`                                           | Instantiates and executes the `ImageCreationCrew`.                                                         |
+| `handle_internet_search`| `@listen("INTERNET_SEARCH")`                                                | Instantiates and executes the `InternetSearchCrew`.                                                        |
+| `handle_simple_message`| `@listen("SIMPLE")`                                                          | No-op, the classifier handles direct responses for simple queries.                                         |
+| `finalize`             | `@listen(or_(handle_simple_message, handle_image_creation, handle_internet_search))` | Returns the serialized state to finish the flow.                                                           |
 
 The flow is decorated with `@persist()`, which automatically saves and restores `ConversationalState` across kickoffs using the flow state's `id` (a UUID passed by the UI as the conversation identifier). State fields: `user_message` and `messages` (the full conversation history, accumulated over time).
 
-### Crew — `crews/handle_user_message_crew.py`
+### Classification & Routing
 
-A single-agent, single-task, sequential `Crew`:
+**`agents/message_classifier_agent.py`**
+- **Agent**: `Message Classifier` powered by `claude-haiku-4-5`.
+- **Role**: Triage the request, emit a quick "routing" acknowledgement using `SendMessageToUserTool`, and return a `ClassificationResult` which controls the Flow router. If the request is simple, it answers the user directly via the tool.
 
-- **Agent**: `CrewAI Conversational Assistant` powered by `claude-haiku-4-5`, equipped with skills (image generation, internet searching, user communication) and tools.
-- **Task**: Interpret the latest user message using the last 10 messages as context, respond helpfully, and always communicate via the `SendMessageToUser` tool.
+### Crews
+
+**`crews/image_creation_crew.py`**
+- **Agent**: `CrewAI Image Creation Assistant` equipped with image tools.
+- **Task**: Interpret the request, generate/edit images via Gemini, and communicate progress using the `SendMessageToUserTool`.
+
+**`crews/internet_search_crew.py`**
+- **Agent**: `CrewAI Internet Research Assistant` equipped with internet search/scraping tools.
+- **Task**: Formulate search queries, evaluate findings, and synthesize clear answers with sources using the `SendMessageToUserTool`.
 
 ### Tools
 
