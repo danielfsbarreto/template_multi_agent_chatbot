@@ -33,8 +33,8 @@ A conversational chatbot built with [CrewAI Flows](https://docs.crewai.com), dep
 ### Request lifecycle
 
 1. User types a message in the browser.
-2. Flask saves it to SQLite, returns `202`, and fires a background `POST /kickoff` to AMP with `conversation_id` + `user_message`.
-3. AMP runs the `ConversationalFlow` — `@persist()` restores the state (including prior `messages`) from the persisted `conversation_id`, appends the new user message, and hands off to the `HandleUserMessageCrew`.
+2. Flask saves it to SQLite, returns `202`, and fires a background `POST /kickoff` to AMP with the channel's `conversation_id` as the flow state `id` + `user_message`.
+3. AMP runs the `ConversationalFlow` — `@persist()` restores the state (including prior `messages`) using the flow's `id`, appends the new user message, and hands off to the `HandleUserMessageCrew`.
 4. The crew's agent reasons over the conversation and calls tools (`SendMessageToUser`, `NanoBananaImageGeneration`, etc.). Each tool emits events through the `ConversationalEventBus`.
 5. The `ConversationalEventListener` catches those events, stamps them with `conversation_id`, and dispatches them to `webhook.site` via the `Dispatcher` client.
 6. `webhook.site` XHR-redirects each event to the Flask server's `/api/webhook` endpoint.
@@ -52,7 +52,7 @@ A conversational chatbot built with [CrewAI Flows](https://docs.crewai.com), dep
 | `load_initial_context` | `@start()`                      | Registers the event listener and appends the new user message to state. |
 | `handle_new_message`   | `@listen(load_initial_context)` | Instantiates and executes the `HandleUserMessageCrew`.                  |
 
-The flow is decorated with `@persist()`, which automatically saves and restores `ConversationalState` across kickoffs using the `conversation_id`. State fields: `conversation_id`, `user_message`, and `messages` (the full conversation history, accumulated over time).
+The flow is decorated with `@persist()`, which automatically saves and restores `ConversationalState` across kickoffs using the flow state's `id` (a UUID passed by the UI as the conversation identifier). State fields: `user_message` and `messages` (the full conversation history, accumulated over time).
 
 ### Crew — `crews/handle_user_message_crew.py`
 
@@ -85,7 +85,7 @@ The event system is the bridge between the CrewAI agent running in AMP and the e
 
 - Wraps the CrewAI event bus. Tools call `emit_message_created()` / `emit_image_generated()` on it.
 - Appends messages to flow state before emitting (persisted automatically by `@persist()`).
-- `register_listener()` creates a `ConversationalEventListener` keyed by `conversation_id` (called at the start of the flow, after state is populated).
+- `register_listener()` creates a `ConversationalEventListener` keyed by `state.id` (called at the start of the flow, after state is populated).
 
 `**ConversationalEventListener**` (`events/listeners/conversational_event_listener.py`):
 

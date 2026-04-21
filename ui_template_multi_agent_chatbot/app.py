@@ -125,14 +125,14 @@ def send_message(channel_id):
 
     kickoff_body = {
         "inputs": {
-            "conversation_id": channel["conversation_id"],
+            "id": channel["conversation_id"],
             "user_message": {"role": "user", "content": content},
         },
     }
 
     app.logger.info("Kickoff body: %s", json.dumps(kickoff_body, default=str))
     app.logger.info(
-        "Kickoff → conversation_id=%s content=%s",
+        "Kickoff → id=%s content=%s",
         channel["conversation_id"],
         content[:80],
     )

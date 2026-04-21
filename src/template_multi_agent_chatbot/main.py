@@ -32,7 +32,7 @@ class ConversationalFlow(Flow[ConversationalState]):
 def kickoff():
     ConversationalFlow().kickoff(
         inputs={
-            "conversation_id": "test-conversation",
+            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
             "user_message": {
                 "role": "user",
                 "content": "Gera uma imagem de uma banana com o estilo gráfico do Studio Ghibli.",
