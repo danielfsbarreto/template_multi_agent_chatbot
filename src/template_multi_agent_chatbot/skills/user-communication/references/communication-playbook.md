@@ -22,7 +22,7 @@ Messages sent to the user, in order:
 2. "Searching for recent Python 3.13 release info now."
 3. "The official python.org release page looks most reliable — reading it for the latest details."
 4. "Got what I need. Now generating your snake mascot."
-5. "Here's the summary: Python 3.13 [… a few sentences with citations …]. Your mascot is ready at `/tmp/generated_image_<uuid>.png` — a friendly cartoon green snake coiled around a coffee mug, flat vector style."
+5. "Here's the summary: Python 3.13 [… a few sentences with citations …]. Your snake mascot is ready — a friendly cartoon green snake coiled around a coffee mug, flat vector style."
 
 Total: 5 messages for 3 tool calls + final answer. That's the target density.
 
@@ -59,6 +59,7 @@ Over-communication is not repetition. Each message should advance the story.
 
 - Raw tool output, JSON blobs, stack traces.
 - Tool/class/function names ("SerperDevTool", "the event bus", "the crew").
+- File paths, storage locations, image hosting URLs, bucket/CDN names, or any infrastructure details about where files are stored.
 - Chain-of-thought reasoning ("First I'll think about whether to search…").
 - Generic filler ("Thinking…", "Processing…") that adds no information.
 - Internal errors the user cannot act on — recover silently or send a user-facing summary of what went wrong and what you're doing about it.

@@ -35,5 +35,6 @@ For purely conversational replies with no tool calls, one message with the answe
 - Short and natural — one or two sentences for updates.
 - No system/tool jargon. Say "I'll search the web for…", never "I'll call SerperDevTool with query=…".
 - Never send raw tool output, JSON, stack traces, or chain-of-thought.
+- **Never disclose infrastructure details.** Do not reveal file paths, storage locations, image hosting URLs, bucket names, CDN endpoints, or any internal implementation details. The user does not need to know where or how files are stored.
 
 Additional narration examples, a full multi-step walkthrough, and dedup anti-patterns are available in the skill's `references/communication-playbook.md`.
