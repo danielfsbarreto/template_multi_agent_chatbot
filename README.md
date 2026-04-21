@@ -1,13 +1,12 @@
 # Multi-Agent Chatbot
 
-<img width="1478" height="1527" alt="image" src="https://github.com/user-attachments/assets/9fd3d0af-d09f-4965-98f7-a853c98d8371" />
-
+![CrewAI Multi-Agent Chatbot Screenshot](README_screenshot.png)
 
 A conversational chatbot built with [CrewAI Flows](https://docs.crewai.com), deployed to [CrewAI AMP](https://docs.crewai.com/en/enterprise), with a Discord-style web UI driven by Flask and vanilla JS.
 
 ## Architecture
 
-![CrewAI Multi-Agent Chatbot Architecture](architecture_diagram.png)
+![CrewAI Multi-Agent Chatbot Architecture](README_architecture.png)
 
 ### Request lifecycle
 
