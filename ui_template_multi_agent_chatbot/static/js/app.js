@@ -30,6 +30,7 @@
   const $newChannelForm   = document.getElementById("new-channel-form");
   const $newChannelName   = document.getElementById("new-channel-name");
   const $btnCancelModal   = document.getElementById("btn-cancel-modal");
+  const $wakeupOverlay    = document.getElementById("wakeup-overlay");
 
   // ---------------------------------------------------------------------------
   // API helpers
@@ -70,6 +71,7 @@
     activeChannelId = channelId;
     renderedEventIds.clear();
     renderChannelList();
+    triggerWakeup();
 
     const ch = await api(`/api/channels/${channelId}`);
     if (!ch || ch.error) return;
@@ -259,6 +261,24 @@
   });
 
   // ---------------------------------------------------------------------------
+  // AMP wakeup
+  // ---------------------------------------------------------------------------
+
+  let wakeupPromise = null;
+
+  function triggerWakeup() {
+    $wakeupOverlay.classList.remove("hidden", "fade-out");
+
+    wakeupPromise = fetch("/api/wakeup", { method: "POST" })
+      .catch(() => {})
+      .finally(() => {
+        $wakeupOverlay.classList.add("fade-out");
+        setTimeout(() => $wakeupOverlay.classList.add("hidden"), 400);
+        wakeupPromise = null;
+      });
+  }
+
+  // ---------------------------------------------------------------------------
   // Utilities
   // ---------------------------------------------------------------------------
 
@@ -300,5 +320,6 @@
   // Init
   // ---------------------------------------------------------------------------
 
+  triggerWakeup();
   loadChannels();
 })();

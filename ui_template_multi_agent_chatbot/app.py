@@ -69,6 +69,29 @@ def index():
 
 
 # ---------------------------------------------------------------------------
+# AMP wakeup
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/wakeup", methods=["POST"])
+def wakeup():
+    def _ping():
+        try:
+            resp = http_requests.get(
+                f"{DEPLOYMENT_URL}/inputs",
+                headers=_crewai_headers(),
+                timeout=30,
+            )
+            resp.raise_for_status()
+            app.logger.info("AMP wakeup OK (%s)", resp.status_code)
+        except Exception as e:
+            app.logger.warning("AMP wakeup failed: %s", e)
+
+    threading.Thread(target=_ping, daemon=True).start()
+    return jsonify({"status": "waking"}), 202
+
+
+# ---------------------------------------------------------------------------
 # Channel API
 # ---------------------------------------------------------------------------
 
