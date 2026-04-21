@@ -2,7 +2,10 @@ import json
 import logging
 import os
 import queue
+import sys
 import threading
+
+sys.path.insert(0, os.path.dirname(__file__))
 
 import db
 import requests as http_requests
@@ -18,6 +21,7 @@ load_dotenv(dotenv_path)
 
 DEPLOYMENT_URL = os.environ["DEPLOYMENT_URL"]
 DEPLOYMENT_KEY = os.environ["DEPLOYMENT_KEY"]
+DISPATCHER_KEY = os.environ["DISPATCHER_KEY"]
 
 app = Flask(__name__)
 db.init_db()
@@ -237,6 +241,10 @@ def channel_events(channel_id):
 
 @app.route("/api/webhook", methods=["POST"])
 def webhook():
+    auth = request.headers.get("Authorization", "")
+    if auth != f"Bearer {DISPATCHER_KEY}":
+        return jsonify({"error": "unauthorized"}), 401
+
     try:
         payload = request.get_json(force=True)
     except Exception:
