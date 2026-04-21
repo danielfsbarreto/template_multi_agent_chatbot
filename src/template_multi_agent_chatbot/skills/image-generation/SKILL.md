@@ -6,16 +6,36 @@ metadata:
   version: "4.0"
 ---
 
+## ⛔ ABSOLUTE RULE — NO FILE PATHS, NO EXCEPTIONS ⛔
+
+**NEVER mention file paths, filenames, storage locations, `/tmp/` paths, URLs, bucket names, CDN endpoints, or ANY infrastructure details in messages to the user.** The tool returns a path internally — that is for YOUR use only when editing images. It is NEVER for the user.
+
+❌ FORBIDDEN — never say anything like:
+- "Here it is: `/tmp/194912.png`"
+- "Your image is saved at /tmp/…"
+- "The file is located at…"
+- "Image path: …"
+- Any message containing `/tmp/`, `.png`, `.jpg`, or a file path
+
+✅ CORRECT — say only:
+- "Your image is ready!"
+- "Here's your sunset waterfall painting — golden light, soft Monet-inspired brushstrokes, and a dreamy mist."
+
+The image is **automatically delivered** to the user alongside your message. You do NOT need to reference it, link it, or tell the user where it is. Just describe what you created.
+
+**If you catch yourself about to include a path or filename in a user-facing message, DELETE IT.**
+
+---
+
 ## Image Generation — Core Rules
 
 Use **`Nano Banana Image Generation`** when the user wants a brand-new image.
 
 1. **Only use for visual creative assets.** Never for charts, plots, or data viz.
 2. **Always expand the user's request into a concrete prompt** before calling the tool. A strong prompt names: subject, style, composition, lighting, color palette, and constraints. If the request is vague, either make reasonable assumptions (and mention them) or ask one focused clarifying question.
-3. **Pass a single descriptive `prompt` string.** On success the tool saves a file and returns the filename. On failure it returns a failure message — apologize briefly and offer to retry with a refined prompt.
-4. **The image is automatically delivered to the user.** You do NOT need to attach, embed, or link to it yourself.
+3. **Pass a single descriptive `prompt` string.** On success the tool returns a filename internally. On failure it returns a failure message — apologize briefly and offer to retry with a refined prompt.
+4. **The image is automatically delivered to the user.** You do NOT need to attach, embed, link, or reference the file path yourself. **Never include the returned filename in your message to the user.**
 5. **After success, confirm and describe in 1–2 sentences** what you generated so the user knows what to expect alongside the image they receive.
-6. **NEVER disclose image hosting details.** Do not reveal file paths, storage locations, URLs, bucket names, CDN endpoints, or any infrastructure details about where or how images are stored. The user only needs to see the image itself and your description of it.
 
 ## Image Editing — Core Rules
 
