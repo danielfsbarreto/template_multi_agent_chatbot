@@ -268,20 +268,11 @@ def webhook():
 
     channel_id = channel["id"]
 
-    if event_type == "agent_execution_started":
+    if event_type == "flow_finished":
         _broadcast_to_channel(
             channel_id,
             {
-                "type": "agent_execution_started",
-                "seq": emission_sequence,
-            },
-        )
-
-    elif event_type == "agent_execution_completed":
-        _broadcast_to_channel(
-            channel_id,
-            {
-                "type": "agent_execution_completed",
+                "type": "flow_finished",
                 "seq": emission_sequence,
             },
         )

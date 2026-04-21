@@ -120,7 +120,7 @@
       scrollToBottom();
     } else if (data.type === "kickoff_started") {
       setTyping(true);
-    } else if (data.type === "agent_execution_completed") {
+    } else if (data.type === "flow_finished") {
       setTyping(false);
     } else if (data.type === "kickoff_error") {
       setTyping(false);
