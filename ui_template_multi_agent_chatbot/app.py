@@ -4,6 +4,7 @@ import os
 import queue
 import sys
 import threading
+import time
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -69,12 +70,23 @@ def index():
 
 
 # ---------------------------------------------------------------------------
-# AMP wakeup
+# AMP wakeup (debounced to once per 10 minutes)
 # ---------------------------------------------------------------------------
+
+_WAKEUP_INTERVAL = 600
+_last_wakeup: float = 0
+_wakeup_lock = threading.Lock()
 
 
 @app.route("/api/wakeup", methods=["POST"])
 def wakeup():
+    global _last_wakeup
+
+    with _wakeup_lock:
+        if time.monotonic() - _last_wakeup < _WAKEUP_INTERVAL:
+            return jsonify({"status": "already_awake"}), 200
+        _last_wakeup = time.monotonic()
+
     def _ping():
         try:
             resp = http_requests.get(

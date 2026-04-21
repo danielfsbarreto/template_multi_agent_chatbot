@@ -66,6 +66,28 @@
     });
   }
 
+  function showMessageSkeleton() {
+    $messages.querySelectorAll(".message, .skeleton-group").forEach((el) => el.remove());
+    const skeleton = document.createElement("div");
+    skeleton.className = "skeleton-group";
+    for (let i = 0; i < 4; i++) {
+      skeleton.innerHTML += `
+        <div class="skeleton-msg">
+          <div class="skeleton-avatar skeleton-pulse"></div>
+          <div class="skeleton-body">
+            <div class="skeleton-line skeleton-line-name skeleton-pulse"></div>
+            <div class="skeleton-line skeleton-pulse" style="width:${65 + Math.random() * 30}%"></div>
+            <div class="skeleton-line skeleton-pulse" style="width:${40 + Math.random() * 35}%"></div>
+          </div>
+        </div>`;
+    }
+    $messages.insertBefore(skeleton, $typingIndicator);
+  }
+
+  function removeMessageSkeleton() {
+    $messages.querySelectorAll(".skeleton-group").forEach((el) => el.remove());
+  }
+
   async function selectChannel(channelId) {
     if (activeChannelId === channelId) return;
     activeChannelId = channelId;
@@ -73,14 +95,22 @@
     renderChannelList();
     triggerWakeup();
 
-    const ch = await api(`/api/channels/${channelId}`);
-    if (!ch || ch.error) return;
-
+    const known = channels.find((c) => c.id === channelId);
     $emptyState.classList.add("hidden");
     $chatView.classList.remove("hidden");
+    $chatChannelName.textContent = known ? known.name : "";
+    $messageInput.placeholder = known ? `Message #${known.name}` : "Message #channel";
+    $messageInput.disabled = true;
+    showMessageSkeleton();
+
+    const ch = await api(`/api/channels/${channelId}`);
+    removeMessageSkeleton();
+    $messageInput.disabled = false;
+
+    if (!ch || ch.error) return;
+
     $chatChannelName.textContent = ch.name;
     $messageInput.placeholder = `Message #${ch.name}`;
-    $messages.querySelectorAll(".message").forEach((el) => el.remove());
 
     (ch.messages || []).forEach((msg) => renderMessage(msg));
     scrollToBottom();
@@ -267,9 +297,13 @@
   let wakeupPromise = null;
 
   function triggerWakeup() {
-    $wakeupOverlay.classList.remove("hidden", "fade-out");
-
     wakeupPromise = fetch("/api/wakeup", { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.status === "waking") {
+          $wakeupOverlay.classList.remove("hidden", "fade-out");
+        }
+      })
       .catch(() => {})
       .finally(() => {
         $wakeupOverlay.classList.add("fade-out");
