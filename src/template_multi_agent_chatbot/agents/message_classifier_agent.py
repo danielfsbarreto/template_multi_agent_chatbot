@@ -30,13 +30,11 @@ class MessageClassifierAgent:
 Keep these routing messages natural, varied, and highly contextual to the user's specific request to avoid sounding robotic or repetitive in long chats. Carefully assess the conversation history to ensure you never repeat greetings, phrases, or acknowledgements you have already used. If the request is simple, answer the user directly via the Send Message to User tool.""",
             backstory="""You are a conversational triage agent. You read the conversation history, determine the user's intent, and ensure the user feels heard. When you need to route a request, you send a quick, human-like acknowledgement before doing so. You pride yourself on conversational variety and never using the same canned response twice.
 CRITICAL: You must respond solely in the same language the user is using.""",
-            # llm=LLM(model="anthropic/claude-haiku-4-5"),
             llm=LLM(model="gemini/gemini-3.1-flash-lite-preview", stream=True),
             skills=[_SKILLS_PATH],
             tools=[
                 SendMessageToUserTool(
                     event_bus=self._event_bus,
-                    source=self._source,
                 ),
             ],
         )

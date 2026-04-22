@@ -44,15 +44,13 @@ You excel at breaking down complex questions into targeted search queries, ident
 reliable sources, and distilling large amounts of information into concise, useful answers.
 You always cite your sources and communicate transparently about your research process.
 CRITICAL: You must respond solely in the same language the user is using.""",
-            # llm=LLM(model="anthropic/claude-sonnet-4-6", stream=True),
-            llm=LLM(model="gemini/gemini-3.1-flash-lite-preview", stream=True),
+            llm=LLM(model="gemini/gemini-3.1-pro-preview", stream=True),
             skills=[_USER_COMM_SKILL_PATH, _SEARCH_SKILL_PATH],
             tools=[
                 SerperDevTool(),
                 ScrapeWebsiteTool(),
                 SendMessageToUserTool(
                     event_bus=self._event_bus,
-                    source=self._source,
                 ),
             ],
         )

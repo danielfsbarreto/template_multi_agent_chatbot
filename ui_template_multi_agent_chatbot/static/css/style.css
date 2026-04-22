@@ -330,33 +330,87 @@ html, body {
   cursor: pointer;
 }
 
-/* Typing indicator */
+/* Typing indicator (anchor for message insertion) */
 .typing-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px 8px;
-  font-size: 13px;
-  color: var(--text-secondary);
+  flex-shrink: 0;
 }
-
-.typing-dots {
-  display: flex;
-  gap: 3px;
-}
-.typing-dots span {
-  width: 6px;
-  height: 6px;
-  background: var(--text-secondary);
-  border-radius: 50%;
-  animation: typing-bounce 1.4s infinite ease-in-out;
-}
-.typing-dots span:nth-child(2) { animation-delay: .16s; }
-.typing-dots span:nth-child(3) { animation-delay: .32s; }
 
 @keyframes typing-bounce {
   0%, 60%, 100% { transform: translateY(0); opacity: .4; }
   30%           { transform: translateY(-4px); opacity: 1; }
+}
+
+/* Input toolbar */
+.input-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 16px;
+  flex-shrink: 0;
+  min-height: 28px;
+}
+
+/* Execution banner */
+.execution-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  animation: banner-pulse 2s ease-in-out infinite;
+}
+
+.execution-banner-logo {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes banner-pulse {
+  0%, 100% { opacity: .5; }
+  50%      { opacity: 1; }
+}
+
+.thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.thinking-toggle input[type="checkbox"] {
+  width: 28px;
+  height: 14px;
+  appearance: none;
+  background: var(--bg-active);
+  border-radius: 7px;
+  position: relative;
+  cursor: pointer;
+  transition: background .2s;
+}
+
+.thinking-toggle input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform .2s, background .2s;
+}
+
+.thinking-toggle input[type="checkbox"]:checked {
+  background: var(--accent);
+}
+
+.thinking-toggle input[type="checkbox"]:checked::after {
+  transform: translateX(14px);
+  background: #fff;
 }
 
 /* Message input */
@@ -618,6 +672,109 @@ html, body {
 @keyframes wakeup-pulse {
   0%, 100% { opacity: .6; }
   50%      { opacity: 1; }
+}
+
+/* ============================================================
+   Streaming cursor
+   ============================================================ */
+
+.message-content.cursor-active:empty::after,
+.message-content.cursor-active > :last-child::after {
+  content: "▎";
+  display: inline;
+  color: var(--text-secondary);
+  animation: cursor-blink .7s steps(1) infinite;
+  font-weight: 300;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+
+/* ============================================================
+   Thinking messages (faded inline messages)
+   ============================================================ */
+
+.message.thinking {
+  opacity: 0.45;
+}
+
+.message.thinking .message-content {
+  font-size: 13px;
+  font-style: italic;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* ============================================================
+   Tool activity indicator
+   ============================================================ */
+
+.tool-activity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 56px;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-height: 40px;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity .6s ease, max-height .6s ease, padding .6s ease, margin .6s ease;
+}
+
+.tool-activity.done {
+  opacity: 0.6;
+  max-height: 40px;
+}
+
+.tool-activity.done .tool-activity-spinner {
+  display: none;
+}
+
+.tool-activity.error {
+  color: var(--danger);
+  opacity: 0.7;
+}
+
+.tool-activity-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  filter: brightness(0) invert(0.55);
+}
+
+.tool-activity-spinner {
+  display: flex;
+  gap: 3px;
+}
+
+.tool-activity-spinner span {
+  width: 4px;
+  height: 4px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out;
+}
+.tool-activity-spinner span:nth-child(2) { animation-delay: .16s; }
+.tool-activity-spinner span:nth-child(3) { animation-delay: .32s; }
+
+.tool-activity-spinner.done span {
+  animation: none;
+  opacity: .4;
+}
+
+.tool-activity-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-activity-text strong {
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 /* ============================================================

@@ -11,6 +11,11 @@
   let isWaitingForReply = false;
 
   const renderedEventIds = new Set();
+  const activeStreams = new Map();
+
+  let thinkingCallId = null;
+  let thinkingElement = null;
+  let thinkingBuffer = "";
 
   // ---------------------------------------------------------------------------
   // DOM refs
@@ -31,6 +36,10 @@
   const $newChannelName   = document.getElementById("new-channel-name");
   const $btnCancelModal   = document.getElementById("btn-cancel-modal");
   const $wakeupOverlay    = document.getElementById("wakeup-overlay");
+  const $executionBanner  = document.getElementById("execution-banner");
+  const $toggleThinking   = document.getElementById("toggle-thinking");
+
+  let showThinking = true;
 
   // ---------------------------------------------------------------------------
   // API helpers
@@ -67,7 +76,7 @@
   }
 
   function showMessageSkeleton() {
-    $messages.querySelectorAll(".message, .skeleton-group").forEach((el) => el.remove());
+    $messages.querySelectorAll(".message, .skeleton-group, .tool-activity").forEach((el) => el.remove());
     const skeleton = document.createElement("div");
     skeleton.className = "skeleton-group";
     for (let i = 0; i < 4; i++) {
@@ -92,6 +101,12 @@
     if (activeChannelId === channelId) return;
     activeChannelId = channelId;
     renderedEventIds.clear();
+    activeStreams.forEach((s) => s.element?.remove());
+    activeStreams.clear();
+    if (thinkingElement) thinkingElement.remove();
+    thinkingCallId = null;
+    thinkingElement = null;
+    thinkingBuffer = "";
     renderChannelList();
     triggerWakeup();
 
@@ -142,20 +157,35 @@
   }
 
   function handleSSEEvent(data) {
-    if (data.type === "message_created" || data.type === "image_generated") {
+    if (data.type === "image_generated") {
       const msg = data.message;
       if (!msg) return;
-
       if (msg.event_id && renderedEventIds.has(msg.event_id)) return;
-
       renderMessage(msg);
       scrollToBottom();
+    } else if (data.type === "llm_stream_chunk") {
+      handleStreamChunk(data);
+    } else if (data.type === "llm_thinking_chunk") {
+      handleThinkingChunk(data);
+    } else if (data.type === "tool_usage_started") {
+      setTyping(false);
+      createToolActivity(data.agent_role, data.tool_name);
+      scrollToBottom();
+    } else if (data.type === "tool_usage_finished") {
+      handleToolUsageFinished(data);
+    } else if (data.type === "tool_usage_error") {
+      handleToolUsageError(data);
     } else if (data.type === "kickoff_started") {
       setTyping(true);
+      setExecuting(true);
     } else if (data.type === "flow_finished") {
+      finalizeAllStreams();
       setTyping(false);
+      setExecuting(false);
     } else if (data.type === "kickoff_error") {
+      finalizeAllStreams();
       setTyping(false);
+      setExecuting(false);
       showError(data.error || "Kickoff failed");
     }
   }
@@ -168,8 +198,16 @@
     if (msg.role === "tool") return;
     if (msg.event_id) renderedEventIds.add(msg.event_id);
 
+    if (msg.event_type === "tool_usage") {
+      return renderToolUsageFromDB(msg);
+    }
+
     const div = document.createElement("div");
     div.className = "message";
+    if (msg.event_type === "thinking") {
+      div.classList.add("thinking");
+      if (!showThinking) div.classList.add("hidden");
+    }
 
     const roleLabel = msg.role === "user" ? "You" : msg.role === "assistant" ? "CrewAI" : "Tool";
     const isCrewAI = msg.role === "assistant" || msg.role === "tool";
@@ -203,6 +241,28 @@
 
     const img = div.querySelector(".message-image");
     if (img) img.addEventListener("load", scrollToBottom);
+    return div;
+  }
+
+  function renderToolUsageFromDB(msg) {
+    let duration_s = null;
+    if (msg.timeline) {
+      try {
+        const t = JSON.parse(msg.timeline);
+        duration_s = t.duration_s;
+      } catch (_) {}
+    }
+    const displayName = humanizeToolName(msg.content);
+    const durationText = duration_s != null ? ` for ${Number(duration_s).toFixed(1)}s` : "";
+    const div = document.createElement("div");
+    div.className = "tool-activity done";
+    div.dataset.tool = msg.content;
+    div.innerHTML = `
+      <img src="/static/img/tool.svg" class="tool-activity-icon" />
+      <span class="tool-activity-text">Used <strong>${escapeHtml(displayName)}</strong>${durationText}</span>
+    `;
+    $messages.insertBefore(div, $typingIndicator);
+    return div;
   }
 
   function scrollToBottom() {
@@ -217,6 +277,206 @@
     if (show) scrollToBottom();
   }
 
+  function setExecuting(show) {
+    $executionBanner.classList.toggle("hidden", !show);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Streaming
+  // ---------------------------------------------------------------------------
+
+  function setCursorOn(el) {
+    if (!el) return;
+    $messages.querySelectorAll(".cursor-active").forEach((e) => {
+      if (e !== el) e.classList.remove("cursor-active");
+    });
+    el.classList.add("cursor-active");
+  }
+
+  function clearCursors() {
+    $messages.querySelectorAll(".cursor-active").forEach((e) => e.classList.remove("cursor-active"));
+  }
+
+  function streamKey(data) {
+    if (data.tool_call?.id) return data.call_id + ":" + data.tool_call.id;
+    return data.call_id;
+  }
+
+  function handleStreamChunk(data) {
+    const { call_id, chunk, tool_call, agent_role, response_id } = data;
+    if (!call_id || !chunk) return;
+
+    const toolName = tool_call?.function?.name;
+    const isSendMessage = toolName === "send_message_to_user";
+    const isToolCall = !!tool_call;
+
+    // Only stream send_message_to_user into the UI.
+    // Plain text chunks are internal LLM reasoning (duplicates the tool content).
+    // Other tool calls are handled by tool_usage_started/finished events.
+    if (!isToolCall) return;
+    if (!isSendMessage) return;
+
+    setTyping(false);
+
+    const key = streamKey(data);
+    let stream = activeStreams.get(key);
+
+    if (!stream) {
+      const el = createStreamingBubble(agent_role);
+      const contentEl = el.querySelector(".message-content");
+      stream = {
+        element: el, contentEl,
+        contentBuffer: "", argsBuffer: "",
+        agentRole: agent_role, toolName: toolName, callId: call_id,
+        responseId: response_id, type: "message",
+        startTime: Date.now(),
+      };
+      activeStreams.set(key, stream);
+    }
+
+    stream.argsBuffer += chunk;
+    stream.contentBuffer = extractSendMessageContent(stream.argsBuffer);
+
+    if (stream.contentEl && stream.contentBuffer) {
+      stream.contentEl.innerHTML = marked.parse(stream.contentBuffer, { breaks: true });
+      setCursorOn(stream.contentEl);
+    }
+    scrollToBottom();
+  }
+
+  function handleThinkingChunk(data) {
+    const { chunk, call_id, agent_role } = data;
+    if (!chunk) return;
+
+    setTyping(false);
+    clearCursors();
+
+    if (call_id !== thinkingCallId) {
+      thinkingCallId = call_id;
+      thinkingBuffer = "";
+      thinkingElement = createStreamingBubble(agent_role || "CrewAI");
+      thinkingElement.classList.add("thinking");
+      if (!showThinking) thinkingElement.classList.add("hidden");
+    }
+    thinkingBuffer += chunk;
+    const contentEl = thinkingElement.querySelector(".message-content");
+    contentEl.innerHTML = marked.parse(thinkingBuffer, { breaks: true });
+    contentEl.scrollTop = contentEl.scrollHeight;
+    scrollToBottom();
+  }
+
+  function handleToolUsageFinished(data) {
+    const el = document.querySelector(
+      `.tool-activity[data-tool="${data.tool_name}"]:not(.done)`
+    );
+    if (el) {
+      el.classList.add("done");
+      const textEl = el.querySelector(".tool-activity-text");
+      if (textEl) {
+        textEl.innerHTML = `Used <strong>${escapeHtml(humanizeToolName(data.tool_name))}</strong> for ${Number(data.duration_s).toFixed(1)}s`;
+      }
+      const spinner = el.querySelector(".tool-activity-spinner");
+      if (spinner) spinner.remove();
+    }
+    scrollToBottom();
+  }
+
+  function handleToolUsageError(data) {
+    console.error(`[ToolUsageError] ${data.tool_name}: ${data.error}`);
+    const el = document.querySelector(
+      `.tool-activity[data-tool="${data.tool_name}"]:not(.done)`
+    );
+    if (el) {
+      el.classList.add("done", "error");
+      const textEl = el.querySelector(".tool-activity-text");
+      if (textEl) {
+        textEl.innerHTML = `<strong>${escapeHtml(humanizeToolName(data.tool_name))}</strong> failed`;
+      }
+      const spinner = el.querySelector(".tool-activity-spinner");
+      if (spinner) spinner.remove();
+    }
+    scrollToBottom();
+  }
+
+  function createStreamingBubble(agentRole) {
+    const div = document.createElement("div");
+    div.className = "message";
+
+    const avatarHtml = '<img src="/static/img/crewai-logo.svg" alt="CrewAI" class="avatar-logo">';
+    const ts = formatTimestamp(new Date().toISOString());
+
+    div.innerHTML = `
+      <div class="message-avatar assistant">${avatarHtml}</div>
+      <div class="message-body">
+        <div class="message-header">
+          <span class="message-author assistant">CrewAI</span>
+          <span class="message-timestamp">${ts}</span>
+        </div>
+        <div class="message-content streaming"></div>
+      </div>
+    `;
+
+    $messages.insertBefore(div, $typingIndicator);
+    return div;
+  }
+
+  function createToolActivity(agentRole, toolName) {
+    const div = document.createElement("div");
+    div.className = "tool-activity";
+    div.dataset.tool = toolName;
+
+    const displayName = humanizeToolName(toolName);
+    div.innerHTML = `
+      <img src="/static/img/tool.svg" class="tool-activity-icon" />
+      <span class="tool-activity-text">Using <strong>${escapeHtml(displayName)}</strong>...</span>
+      <div class="tool-activity-spinner"><span></span><span></span><span></span></div>
+    `;
+
+    $messages.insertBefore(div, $typingIndicator);
+    return div;
+  }
+
+  function finalizeAllStreams() {
+    for (const [, stream] of activeStreams) {
+      finalizeStream(stream);
+    }
+    activeStreams.clear();
+    thinkingCallId = null;
+    thinkingElement = null;
+    thinkingBuffer = "";
+    scrollToBottom();
+  }
+
+  function finalizeStream(stream) {
+    if (stream.contentEl) {
+      stream.contentEl.classList.remove("streaming", "cursor-active");
+      if (!stream.contentBuffer) stream.contentEl.style.display = "none";
+    }
+  }
+
+  function extractSendMessageContent(buffer) {
+    try {
+      const parsed = JSON.parse(buffer);
+      return parsed.content || "";
+    } catch {
+      const match = buffer.match(/"content"\s*:\s*"/);
+      if (!match) return "";
+      const start = match.index + match[0].length;
+      let text = buffer.slice(start);
+      text = text.replace(/"\s*\}?\s*$/, "");
+      return text
+        .replace(/\\n/g, "\n")
+        .replace(/\\"/g, '"')
+        .replace(/\\u([0-9a-fA-F]{4})/g, (_, cp) => String.fromCharCode(parseInt(cp, 16)))
+        .replace(/\\\\/g, "\\");
+    }
+  }
+
+  function humanizeToolName(name) {
+    if (!name) return "a tool";
+    return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
   // ---------------------------------------------------------------------------
   // Send message
   // ---------------------------------------------------------------------------
@@ -229,10 +489,14 @@
     $messageInput.value = "";
 
     try {
-      await api(`/api/channels/${activeChannelId}/messages`, {
+      const result = await api(`/api/channels/${activeChannelId}/messages`, {
         method: "POST",
         body: JSON.stringify({ content }),
       });
+      if (result && result.message) {
+        renderMessage(result.message);
+        scrollToBottom();
+      }
     } catch (err) {
       showError("Failed to send message");
     }
@@ -349,6 +613,17 @@
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 5000);
   }
+
+  // ---------------------------------------------------------------------------
+  // Thinking toggle
+  // ---------------------------------------------------------------------------
+
+  $toggleThinking.addEventListener("change", () => {
+    showThinking = $toggleThinking.checked;
+    $messages.querySelectorAll(".message.thinking").forEach((el) => {
+      el.classList.toggle("hidden", !showThinking);
+    });
+  });
 
   // ---------------------------------------------------------------------------
   // Init

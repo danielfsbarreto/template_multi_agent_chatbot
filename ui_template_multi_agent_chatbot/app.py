@@ -5,6 +5,7 @@ import queue
 import sys
 import threading
 import time
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -43,6 +44,18 @@ def webhook_preflight():
 
 _sse_subscribers: dict[str, list[queue.Queue]] = {}
 _sse_lock = threading.Lock()
+
+_active_thinking: dict[str, dict] = {}  # conv_id → {call_id, text}
+
+
+def _parse_dt(val) -> float:
+    """Parse an ISO-8601 datetime string to an epoch timestamp."""
+    if isinstance(val, (int, float)):
+        return float(val)
+    try:
+        return datetime.fromisoformat(str(val)).timestamp()
+    except (ValueError, TypeError):
+        return time.time()
 
 
 def _broadcast_to_channel(channel_id: str, event_data: dict):
@@ -154,13 +167,6 @@ def send_message(channel_id):
         return jsonify({"error": "content is required"}), 400
 
     msg = db.add_message(channel_id, role="user", content=content)
-    _broadcast_to_channel(
-        channel_id,
-        {
-            "type": "message_created",
-            "message": msg,
-        },
-    )
 
     kickoff_body = {
         "inputs": {
@@ -186,7 +192,9 @@ def send_message(channel_id):
             )
             if not resp.ok:
                 app.logger.error(
-                    "Kickoff HTTP %s: %s", resp.status_code, resp.text[:500],
+                    "Kickoff HTTP %s: %s",
+                    resp.status_code,
+                    resp.text[:500],
                 )
             resp.raise_for_status()
             result = resp.json()
@@ -312,56 +320,181 @@ def webhook():
     channel_id = channel["id"]
 
     if event_type == "flow_finished":
+        _active_thinking.pop(conversation_id, None)
+        _broadcast_to_channel(
+            channel_id,
+            {"type": "flow_finished", "seq": emission_sequence},
+        )
+
+    elif event_type == "llm_stream_chunk":
         _broadcast_to_channel(
             channel_id,
             {
-                "type": "flow_finished",
+                "type": "llm_stream_chunk",
+                "call_id": payload.get("call_id"),
+                "response_id": payload.get("response_id"),
+                "chunk": payload.get("chunk"),
+                "tool_call": payload.get("tool_call"),
+                "call_type": payload.get("call_type"),
+                "agent_role": payload.get("agent_role", ""),
                 "seq": emission_sequence,
             },
         )
 
-    elif event_type == "message_created":
-        result = payload.get("result", {})
-        message_data = result.get("message", {})
-        role = message_data.get("role", "assistant")
-        content = message_data.get("content", "")
-        msg = db.add_message(
+    elif event_type == "llm_thinking_chunk":
+        call_id = payload.get("call_id")
+        agent_role = payload.get("agent_role", "")
+        chunk_text = payload.get("chunk", "")
+
+        at = _active_thinking.get(conversation_id)
+        if not at or at["call_id"] != call_id:
+            at = {"call_id": call_id, "text": ""}
+            _active_thinking[conversation_id] = at
+        at["text"] += chunk_text
+
+        db.upsert_thinking(
             channel_id,
-            role=role,
-            content=content,
-            event_type="message_created",
-            event_id=event_id,
+            event_id=f"thinking:{call_id}",
+            content=at["text"],
+            agent_role=agent_role,
         )
-        if msg:
+
+        _broadcast_to_channel(
+            channel_id,
+            {
+                "type": "llm_thinking_chunk",
+                "call_id": call_id,
+                "response_id": payload.get("response_id"),
+                "chunk": chunk_text,
+                "agent_role": agent_role,
+                "seq": emission_sequence,
+            },
+        )
+
+    elif event_type == "tool_usage_started":
+        tool_name = payload.get("tool_name", "")
+        if tool_name not in ("structured_output", "send_message_to_user"):
             _broadcast_to_channel(
                 channel_id,
                 {
-                    "type": "message_created",
-                    "message": msg,
+                    "type": "tool_usage_started",
+                    "tool_name": tool_name,
+                    "agent_role": payload.get("agent_role", ""),
                     "seq": emission_sequence,
                 },
+            )
+
+    elif event_type == "tool_usage_finished":
+        tool_name = payload.get("tool_name", "")
+        agent_role = payload.get("agent_role", "")
+
+        if tool_name == "structured_output":
+            pass
+
+        elif tool_name == "send_message_to_user":
+            tool_args = payload.get("tool_args", {})
+            if isinstance(tool_args, str):
+                try:
+                    tool_args = json.loads(tool_args)
+                except (json.JSONDecodeError, TypeError):
+                    tool_args = {}
+            content = (
+                tool_args.get("content", "") if isinstance(tool_args, dict) else ""
+            )
+            if content:
+                db.add_message(
+                    channel_id,
+                    role="assistant",
+                    content=content,
+                    event_type="assistant_message",
+                    event_id=event_id,
+                    agent_role=agent_role,
+                )
+                app.logger.info(
+                    "send_message_to_user persisted (%d chars) conv=%s",
+                    len(content),
+                    conversation_id[:12],
+                )
+
+        elif tool_name:
+            start_ts = _parse_dt(payload.get("started_at"))
+            end_ts = _parse_dt(payload.get("finished_at"))
+            duration_s = round(end_ts - start_ts, 1)
+            db.add_message(
+                channel_id,
+                role="assistant",
+                content=tool_name,
+                event_type="tool_usage",
+                event_id=event_id,
+                agent_role=agent_role,
+                timeline=json.dumps({"duration_s": duration_s}),
+            )
+            _broadcast_to_channel(
+                channel_id,
+                {
+                    "type": "tool_usage_finished",
+                    "tool_name": tool_name,
+                    "duration_s": duration_s,
+                    "agent_role": agent_role,
+                    "seq": emission_sequence,
+                },
+            )
+            app.logger.info(
+                "Tool finished: %s (%.1fs) conv=%s",
+                tool_name,
+                duration_s,
+                conversation_id[:12],
+            )
+
+    elif event_type == "tool_usage_error":
+        tool_name = payload.get("tool_name", "")
+        if tool_name not in ("structured_output", "send_message_to_user"):
+            error_msg = str(payload.get("error", "Unknown error"))
+            _broadcast_to_channel(
+                channel_id,
+                {
+                    "type": "tool_usage_error",
+                    "tool_name": tool_name,
+                    "error": error_msg,
+                    "seq": emission_sequence,
+                },
+            )
+            app.logger.warning(
+                "Tool error: %s — %s conv=%s",
+                tool_name,
+                error_msg[:100],
+                conversation_id[:12],
             )
 
     elif event_type == "image_generated":
         result = payload.get("result", {})
         image_b64 = result.get("image", "")
-        msg = db.add_message(
+
+        db.add_message(
             channel_id,
             role="assistant",
             content="",
             event_type="image_generated",
             image_base64=image_b64,
             event_id=event_id,
+            agent_role=payload.get("agent_role", ""),
         )
-        if msg:
-            _broadcast_to_channel(
-                channel_id,
-                {
-                    "type": "image_generated",
-                    "message": msg,
-                    "seq": emission_sequence,
+
+        _broadcast_to_channel(
+            channel_id,
+            {
+                "type": "image_generated",
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "event_type": "image_generated",
+                    "image_base64": image_b64,
+                    "event_id": event_id,
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
                 },
-            )
+                "seq": emission_sequence,
+            },
+        )
 
     return jsonify({"status": "ok"}), 200
 

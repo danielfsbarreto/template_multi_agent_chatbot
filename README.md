@@ -15,9 +15,9 @@ A conversational chatbot built with [CrewAI Flows](https://docs.crewai.com), dep
 3. AMP runs the `ConversationalFlow` — `@persist()` restores the state (including prior `messages`) using the flow's `id`, appends the new user message, and hands off to the `MessageClassifierAgent`.
 4. The classifier categorizes the message and either responds directly (for simple queries) or routes the flow to the `ImageCreationCrew` or `InternetSearchCrew`.
 5. The active agent reasons over the conversation and calls tools (`SendMessageToUser`, `NanoBananaImageGeneration`, etc.). Each tool emits events through the `ConversationalEventBus`.
-6. The `ConversationalEventListener` catches those events, stamps them with `conversation_id`, and dispatches them to `webhook.site` via the `Dispatcher` client.
+6. The `ConversationalEventListener` catches those events (`LLMStreamChunkEvent`, `LLMThinkingChunkEvent`, `ToolUsageStartedEvent`, `ToolUsageFinishedEvent`, `ToolUsageErrorEvent`, `ImageGenerated`, `FlowFinishedEvent`), stamps them with `conversation_id`, and dispatches them to `webhook.site` via the `Dispatcher` client.
 7. `webhook.site` XHR-redirects each event to the Flask server's `/api/webhook` endpoint.
-8. Flask persists `message_created` / `image_generated` payloads to SQLite and broadcasts all events to connected browsers via SSE.
+8. Flask persists each event immediately as it arrives (thinking chunks via upsert, tool usage and messages as individual rows) and broadcasts all events to connected browsers via SSE.
 
 ## Back-End (`src/template_multi_agent_chatbot/`)
 
@@ -40,17 +40,20 @@ The flow is decorated with `@persist()`, which automatically saves and restores 
 ### Classification & Routing
 
 **`agents/message_classifier_agent.py`**
-- **Agent**: `Message Classifier` powered by `claude-haiku-4-5`.
+- **Agent**: `Message Classifier` powered by `gemini/gemini-3.1-flash-lite-preview`.
+- **Skills**: `skills/` (discovers `user-communication` and other relevant skills).
 - **Role**: Triage the request, emit a quick "routing" acknowledgement using `SendMessageToUserTool`, and return a `ClassificationResult` which controls the Flow router. If the request is simple, it answers the user directly via the tool.
 
 ### Crews
 
 **`crews/image_creation_crew.py`**
-- **Agent**: `CrewAI Image Creation Assistant` equipped with image tools.
+- **Agent**: `CrewAI Image Creation Assistant` powered by `gemini/gemini-3.1-pro-preview`, equipped with image tools.
+- **Skills**: `skills/user-communication`, `skills/image-generation`.
 - **Task**: Interpret the request, generate/edit images via Gemini, and communicate progress using the `SendMessageToUserTool`.
 
 **`crews/internet_search_crew.py`**
-- **Agent**: `CrewAI Internet Research Assistant` equipped with internet search/scraping tools.
+- **Agent**: `CrewAI Internet Research Assistant` powered by `gemini/gemini-3.1-pro-preview`, equipped with internet search/scraping tools.
+- **Skills**: `skills/user-communication`, `skills/internet-searching`.
 - **Task**: Formulate search queries, evaluate findings, and synthesize clear answers with sources using the `SendMessageToUserTool`.
 
 ### Tools
@@ -58,8 +61,8 @@ The flow is decorated with `@persist()`, which automatically saves and restores 
 
 | Tool                                  | Description                                                                                                                                      |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `SendMessageToUserTool`               | Emits a `MessageCreated` event so the user sees the agent's reply.                                                                               |
-| `NanoBananaImageGenerationTool`       | Generates an image via Gemini (`gemini-3.1-flash-image-preview`), emits both a `MessageCreated` (file path) and `ImageGenerated` (base64) event. |
+| `SendMessageToUserTool`               | Appends the agent's reply to flow state. Content reaches the user via `llm_stream_chunk` events and is persisted on `tool_usage_finished`.        |
+| `NanoBananaImageGenerationTool`       | Generates an image via Gemini (`gemini-3.1-flash-image-preview`), emits an `ImageGenerated` (base64) event.                                      |
 | `NanoBananaImageEditingTool`          | Edits an existing image via Gemini with a text prompt, same event pattern as generation.                                                         |
 | `SerperDevTool` / `ScrapeWebsiteTool` | Web search and scraping (from `crewai_tools`).                                                                                                   |
 
@@ -70,18 +73,16 @@ The event system is the bridge between the CrewAI agent running in AMP and the e
 
 **Custom event types** (`events/types/`):
 
-- `MessageCreated` — carries `result.message` (role + content).
 - `ImageGenerated` — carries `result.image` (base64-encoded PNG).
 
 `**ConversationalEventBus`** (`events/conversational_event_bus.py`):
 
-- Wraps the CrewAI event bus. Tools call `emit_message_created()` / `emit_image_generated()` on it.
-- Appends messages to flow state before emitting (persisted automatically by `@persist()`).
-- `register_listener()` creates a `ConversationalEventListener` keyed by `state.id` (called at the start of the flow, after state is populated).
+- Wraps the CrewAI event bus. Tools call `append_message()` / `emit_image_generated()` on it.
+- Appends messages to flow state (persisted automatically by `@persist()`).
 
 `**ConversationalEventListener**` (`events/listeners/conversational_event_listener.py`):
 
-- A `BaseEventListener` that subscribes to `MessageCreated`, `ImageGenerated`, `LLMStreamChunkEvent`, `LLMThinkingChunkEvent`, and `AgentExecutionCompletedEvent`.
+- A `BaseEventListener` that subscribes to `ImageGenerated`, `LLMStreamChunkEvent`, `LLMThinkingChunkEvent`, `FlowFinishedEvent`, `ToolUsageStartedEvent`, `ToolUsageFinishedEvent`, and `ToolUsageErrorEvent`.
 - Stamps each event with `source_fingerprint` and `fingerprint_metadata.conversation_id`.
 - Dispatches every event to the external webhook via the `Dispatcher` client.
 
@@ -94,10 +95,10 @@ The event system is the bridge between the CrewAI agent running in AMP and the e
 Flask app with a Discord-inspired dark theme.
 
 - **Channels**: each channel maps to a `conversation_id` (UUID generated on creation). Multiple concurrent conversations.
-- **SQLite** (`db/chatbot.db`): stores channels and messages with `event_id`-based deduplication.
+- **SQLite** (`db/chatbot.db`): stores channels and messages with `event_id`-based deduplication. Thinking chunks are upserted incrementally; tool usage and assistant messages are persisted immediately as individual rows.
 - **SSE**: each browser tab subscribes to `/api/channels/<id>/events` for real-time updates.
-- **Webhook receiver** (`POST /api/webhook`): receives events forwarded from webhook.site, matches them to channels via `fingerprint_metadata.conversation_id`, persists messages/images, and broadcasts all event types over SSE.
-- **Frontend** (`static/js/app.js`): renders messages with markdown support (via `marked.js`), displays base64 images inline, shows a "CrewAI is thinking..." indicator on `kickoff_started` and hides it on `agent_execution_completed`.
+- **Webhook receiver** (`POST /api/webhook`): receives events forwarded from webhook.site, matches them to channels via `fingerprint_metadata.conversation_id`, persists each event immediately to SQLite, and broadcasts to connected browsers via SSE.
+- **Frontend** (`static/js/app.js`): renders messages with markdown support (via `marked.js`), displays base64 images inline, shows agent thinking as faded inline messages (togglable via "Show Thoughts"), displays tool usage with inline wrench icons ("Using X..." → "Used X for Ns"), and shows a "CrewAI is executing your request..." banner during active flows.
 
 ## Setup
 
@@ -105,15 +106,14 @@ Flask app with a Discord-inspired dark theme.
 
 1. Copy `.env.example` to `.env` and fill in the keys:
 
-  | Key                 | Purpose                                    |
-  | ------------------- | ------------------------------------------ |
-  | `ANTHROPIC_API_KEY` | LLM for the conversational agent           |
-  | `GEMINI_API_KEY`    | Image generation / editing                 |
-  | `SERPER_API_KEY`    | Web search                                 |
-  | `DISPATCHER_URL`    | Webhook.site endpoint for event forwarding |
-  | `DISPATCHER_KEY`    | Bearer token for the dispatcher            |
-  | `DEPLOYMENT_URL`    | CrewAI AMP deployment URL                  |
-  | `DEPLOYMENT_KEY`    | CrewAI AMP API key                         |
+  | Key                 | Purpose                                                  |
+  | ------------------- | -------------------------------------------------------- |
+  | `GEMINI_API_KEY`    | LLM (classifier, crews) and image generation / editing   |
+  | `SERPER_API_KEY`    | Web search via Serper                                    |
+  | `DISPATCHER_URL`    | Webhook.site endpoint for event forwarding               |
+  | `DISPATCHER_KEY`    | Bearer token for the dispatcher                          |
+  | `DEPLOYMENT_URL`    | CrewAI AMP deployment URL                                |
+  | `DEPLOYMENT_KEY`    | CrewAI AMP API key                                       |
 
 2. Deploy the flow to CrewAI AMP:
   ```bash

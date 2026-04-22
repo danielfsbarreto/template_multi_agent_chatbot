@@ -1,4 +1,4 @@
-from typing import Any, Type
+from typing import Type
 
 from crewai.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
@@ -32,10 +32,9 @@ class SendMessageToUserTool(BaseTool):
     args_schema: Type[BaseModel] = SendMessageToUserToolInput
 
     event_bus: ConversationalEventBus
-    source: Any
 
     def _run(self, content: str) -> str:
         message = Message.create(content=content)
-        self.event_bus.emit_message_created(self.source, message)
+        self.event_bus.append_message(message)
 
         return "Message delivered to the user."
