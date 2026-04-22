@@ -55,7 +55,7 @@ def kickoff():
         inputs={
             "user_message": {
                 "role": "user",
-                "content": "Me gera uma imagem de um poring bem bonitinho!",
+                "content": "search about latest news regarding openai",
             },
         }
     )

@@ -60,8 +60,7 @@ class NanoBananaImageEditingTool(BaseTool):
 
                 image_bytes = open(f"/tmp/{filename}.png", "rb").read()
                 image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-                self.event_bus.emit_message_created(
-                    self.source,
+                self.event_bus.append_message(
                     Message.create(role="tool", content=f"/tmp/{filename}.png"),
                 )
                 self.event_bus.emit_image_generated(self.source, image_base64)

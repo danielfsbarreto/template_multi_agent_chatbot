@@ -1,8 +1,14 @@
-from crewai.events import BaseEventListener, FlowFinishedEvent
+from crewai.events import (
+    BaseEventListener,
+    FlowFinishedEvent,
+    ToolUsageErrorEvent,
+    ToolUsageFinishedEvent,
+    ToolUsageStartedEvent,
+)
 from crewai.events.types.llm_events import LLMStreamChunkEvent, LLMThinkingChunkEvent
 
 from template_multi_agent_chatbot.events.clients import Dispatcher
-from template_multi_agent_chatbot.events.types import ImageGenerated, MessageCreated
+from template_multi_agent_chatbot.events.types import ImageGenerated
 
 
 class ConversationalEventListener(BaseEventListener):
@@ -13,12 +19,14 @@ class ConversationalEventListener(BaseEventListener):
         self._id = id
 
     def setup_listeners(self, crewai_event_bus):
-        @crewai_event_bus.on(MessageCreated)
         @crewai_event_bus.on(ImageGenerated)
         @crewai_event_bus.on(LLMStreamChunkEvent)
         @crewai_event_bus.on(LLMThinkingChunkEvent)
         @crewai_event_bus.on(FlowFinishedEvent)
-        def on_message_created(source, event):
+        @crewai_event_bus.on(ToolUsageFinishedEvent)
+        @crewai_event_bus.on(ToolUsageStartedEvent)
+        @crewai_event_bus.on(ToolUsageErrorEvent)
+        def on_event(source, event):
             if not event.source_fingerprint:
                 event.source_fingerprint = self._id
 

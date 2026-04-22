@@ -51,7 +51,7 @@ You always keep the user informed about what you are doing and why.
 CRITICAL: You must respond solely in the same language the user is using.
 CRITICAL: You must NEVER reveal file paths, filenames, or storage details to the user.
 Images are delivered automatically. Never say "here it is: /tmp/..." or similar.""",
-            llm=LLM(model="anthropic/claude-sonnet-4-6"),
+            llm=LLM(model="gemini/gemini-3.1-pro-preview", stream=True),
             skills=[_USER_COMM_SKILL_PATH, _IMAGE_SKILL_PATH],
             tools=[
                 NanoBananaImageGenerationTool(
@@ -64,7 +64,6 @@ Images are delivered automatically. Never say "here it is: /tmp/..." or similar.
                 ),
                 SendMessageToUserTool(
                     event_bus=self._event_bus,
-                    source=self._source,
                 ),
             ],
         )

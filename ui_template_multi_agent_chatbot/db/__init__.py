@@ -1,6 +1,6 @@
+import os
 import sqlite3
 import uuid
-import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "chatbot.db")
 
@@ -31,7 +31,11 @@ def init_db():
             event_type TEXT,
             image_base64 TEXT,
             timestamp TEXT DEFAULT (datetime('now')),
-            event_id TEXT UNIQUE
+            event_id TEXT UNIQUE,
+            agent_role TEXT,
+            thinking_content TEXT,
+            tools_used TEXT,
+            timeline TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_messages_channel
@@ -40,6 +44,17 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_channels_conversation
             ON channels(conversation_id);
     """)
+    for col, col_type in [
+        ("agent_role", "TEXT"),
+        ("thinking_content", "TEXT"),
+        ("tools_used", "TEXT"),
+        ("timeline", "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE messages ADD COLUMN {col} {col_type}")
+            conn.commit()
+        except Exception:
+            pass
     conn.close()
 
 
@@ -68,7 +83,7 @@ def get_channels():
             SELECT channel_id, content, timestamp,
                    ROW_NUMBER() OVER (PARTITION BY channel_id ORDER BY id DESC) AS rn
             FROM messages
-            WHERE event_type IS NULL OR event_type = 'message_created'
+            WHERE event_type IS NULL OR event_type IN ('message_created', 'assistant_message')
         ) m ON m.channel_id = c.id AND m.rn = 1
         ORDER BY c.created_at ASC
     """).fetchall()
@@ -102,14 +117,37 @@ def get_channel_by_conversation_id(conversation_id):
     return dict(row) if row else None
 
 
-def add_message(channel_id, role, content="", event_type=None, image_base64=None, event_id=None):
+def add_message(
+    channel_id,
+    role,
+    content="",
+    event_type=None,
+    image_base64=None,
+    event_id=None,
+    agent_role=None,
+    thinking_content=None,
+    tools_used=None,
+    timeline=None,
+):
     conn = _get_conn()
     try:
         conn.execute(
             """INSERT OR IGNORE INTO messages
-               (channel_id, role, content, event_type, image_base64, event_id)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (channel_id, role, content, event_type, image_base64, event_id),
+               (channel_id, role, content, event_type, image_base64, event_id,
+                agent_role, thinking_content, tools_used, timeline)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                channel_id,
+                role,
+                content,
+                event_type,
+                image_base64,
+                event_id,
+                agent_role,
+                thinking_content,
+                tools_used,
+                timeline,
+            ),
         )
         conn.commit()
         row = conn.execute(
@@ -121,6 +159,18 @@ def add_message(channel_id, role, content="", event_type=None, image_base64=None
     except Exception:
         conn.close()
         raise
+
+
+def upsert_thinking(channel_id, event_id, content, agent_role=None):
+    conn = _get_conn()
+    conn.execute(
+        """INSERT INTO messages (channel_id, role, content, event_type, event_id, agent_role)
+           VALUES (?, 'assistant', ?, 'thinking', ?, ?)
+           ON CONFLICT(event_id) DO UPDATE SET content = excluded.content""",
+        (channel_id, content, event_id, agent_role),
+    )
+    conn.commit()
+    conn.close()
 
 
 def get_messages(channel_id):

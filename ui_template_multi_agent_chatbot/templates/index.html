@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CrewAI Chatbot</title>
+  <link rel="icon" type="image/svg+xml" href="/static/img/crewai-logo.svg">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -43,14 +44,19 @@
         </header>
 
         <div id="messages" class="messages">
-          <div id="typing-indicator" class="typing-indicator hidden">
-            <div class="typing-dots">
-              <span></span><span></span><span></span>
-            </div>
-            <span>CrewAI is thinking...</span>
-          </div>
+          <div id="typing-indicator" class="typing-indicator hidden"></div>
         </div>
 
+        <div class="input-toolbar">
+          <div id="execution-banner" class="execution-banner hidden">
+            <img src="/static/img/crewai-logo.svg" alt="" class="execution-banner-logo">
+            <span>CrewAI is executing your request…</span>
+          </div>
+          <label class="thinking-toggle" title="Show/hide agent thoughts">
+            <input type="checkbox" id="toggle-thinking" checked>
+            <span class="thinking-toggle-label">Show Thoughts</span>
+          </label>
+        </div>
         <form id="message-form" class="message-form">
           <input
             type="text"
