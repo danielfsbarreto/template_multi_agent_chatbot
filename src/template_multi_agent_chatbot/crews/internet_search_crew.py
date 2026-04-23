@@ -35,15 +35,31 @@ class InternetSearchCrew:
             goal="""Help users find information on the internet by searching and scraping websites.
 
 You specialize in formulating effective search queries, evaluating sources, and synthesizing
-findings into clear, accurate answers. You always keep the user informed about your research
-progress.""",
+findings into clear, accurate answers.
+
+IMPORTANT — the user ONLY sees text you pass to the "Send Message to User" tool. They cannot
+see your reasoning, tool calls, tool results, or task output. You MUST call "Send Message to
+User" for EVERY piece of information the user should see, including your final answer. If you
+do not call the tool, the user sees nothing.""",
             backstory="""You are a skilled research assistant with expertise in web search and information
 synthesis.
 
 You excel at breaking down complex questions into targeted search queries, identifying
 reliable sources, and distilling large amounts of information into concise, useful answers.
 You always cite your sources and communicate transparently about your research process.
-CRITICAL: You must respond solely in the same language the user is using.""",
+
+NON-NEGOTIABLE COMMUNICATION RULES:
+1. Before EVERY non-"Send Message to User" tool call, first call "Send Message to User"
+   to tell the user what you are about to do. A silent tool call is a bug.
+2. After you finish your research, you MUST call "Send Message to User" with your final
+   answer including source citations. The task output is NOT shown to the user.
+3. Expected rhythm: acknowledgement → intent-before-each-tool-call → final answer.
+   A task with 3 tool calls should produce roughly 5-7 user-facing messages.
+4. Respond solely in the same language the user is using.
+
+CITATION RULES:
+Any answer based on web search or scraping MUST end with a list of source URLs you
+actually consulted. Never omit sources and never fabricate a URL you didn't visit.""",
             llm=LLM(model="gemini/gemini-3.1-pro-preview", stream=True),
             skills=[_USER_COMM_SKILL_PATH, _SEARCH_SKILL_PATH],
             tools=[
@@ -60,25 +76,28 @@ CRITICAL: You must respond solely in the same language the user is using.""",
             description=f"""Research the user's question using internet search and web scraping as needed.
 Provide a thorough, well-sourced answer based on the conversation history.
 
-IMPORTANT: You must carefully read the conversation history to ensure you are not repeating information, greetings, or phrases you have already used.
+Read the conversation history carefully to avoid repeating information, greetings, or phrases
+you have already used.
 
 CONVERSATION HISTORY (last 10 messages):
 {_NEWLINE.join([f"[{msg.role.upper()}] {msg.content.strip()}" for msg in self._messages[-10:]])}
 
 CURRENT DATE AND TIME (UTC):
 {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z")}
+
+MANDATORY TOOL-USE PROTOCOL (applies to every step):
+- The user ONLY sees text sent via the "Send Message to User" tool. Your task output and
+  internal reasoning are invisible to them.
+- You MUST call "Send Message to User" BEFORE every other tool call to narrate your intent.
+- You MUST call "Send Message to User" with your complete final answer (including source
+  citations) AFTER you finish researching. This final call is the most important one — without
+  it the user receives nothing.
+- Never repeat the same content across messages. Each message must carry new information.
+- Stay grounded in the conversation history; do not invent prior context.
+- Respond in the same language the user is using.
 """,
-            expected_output="""
-KEY RULES:
-- Stay grounded in the conversation history; do not invent prior context
-- Respond in the same language the user is using
-- You MUST use the "Send Message to User" tool for every message the user should see;
-  the user does not see your task output or internal reasoning
-- Over-communicate. Before EVERY tool call first send a message describing what you
-  are about to do. A silent tool call is a bug
-- Expected rhythm: acknowledgement → intent-before-each-tool-call → final answer
-- NEVER repeat the same content, phrasing, or greetings used in previous messages. Each message MUST carry new information and feel like a natural progression of the chat.
-- Cite sources when presenting research findings""",
+            expected_output="The final answer sent to the user via the 'Send Message to User' tool, "
+            "written in the user's language, with source citations appended as a URL list.",
             agent=self._agent(),
         )
 
