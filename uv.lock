@@ -508,7 +508,7 @@ wheels = [
 
 [[package]]
 name = "crewai"
-version = "1.14.3a1"
+version = "1.14.3a2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -542,9 +542,9 @@ dependencies = [
     { name = "tomli-w" },
     { name = "uv" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/03/1c/d12e3318ba91d9cb45504c3562e03312660e1b3d39fd20e45caa98da2495/crewai-1.14.3a1.tar.gz", hash = "sha256:c05a03cb7e39681449a6e2e5f0ad6d54c346e6a2504e40a4345245b41ea51e17", size = 7832006, upload-time = "2026-04-20T17:00:01.501Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/26/8c/0ba68b1cd5b1b38f750e79cf94447622ce5ea3fd6fa438b0edd2693f7b1f/crewai-1.14.3a2.tar.gz", hash = "sha256:f9a6360879efb43350a5637f99a4d9aa26ae47ad4253c615f26b8378b1cb6dd4", size = 7833884, upload-time = "2026-04-21T19:14:54.951Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/ac/261520b11dd3ac1e8bc2179aaee70a0aafc03a2cd6771924fa184358e561/crewai-1.14.3a1-py3-none-any.whl", hash = "sha256:4960f8860b6d8c4245ed4eba3d1081fa23eea3250476c30ca1dda507e2ddcab4", size = 1069688, upload-time = "2026-04-20T16:59:59.491Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/dd/0839b707a8df0310fd3513927ceaedada62c616e1a42660b2a98db8e9ddd/crewai-1.14.3a2-py3-none-any.whl", hash = "sha256:f027884f89e3686a1c491db927a4d2f2f628036cae59836e80ca197049843361", size = 1070041, upload-time = "2026-04-21T19:14:53.021Z" },
 ]
 
 [package.optional-dependencies]
@@ -557,7 +557,7 @@ tools = [
 
 [[package]]
 name = "crewai-tools"
-version = "1.14.3a1"
+version = "1.14.3a2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -569,9 +569,9 @@ dependencies = [
     { name = "tiktoken" },
     { name = "youtube-transcript-api" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/de/9d/a33c3d6c28a8ffa98734e8de347989f23871fb3864cdb3fb0c1abccc6a17/crewai_tools-1.14.3a1.tar.gz", hash = "sha256:5c1241b0172a4583c36c2d1d66d768f6560c75d5c715d7b9eca24fda53f604af", size = 874759, upload-time = "2026-04-20T17:00:07.775Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8f/83/320f109361d7d5fde4c2ccd7b1d7ee26c080e6c6c010326c5f351a88c96c/crewai_tools-1.14.3a2.tar.gz", hash = "sha256:f5cd821f8d2820799d5e24052295304bcf5d25ace41523654326668b151c4964", size = 884230, upload-time = "2026-04-21T19:15:01.621Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d5/94/e4cffecd61dbedd03a689b737286dd5ca35a58eac3fe164707a7af416615/crewai_tools-1.14.3a1-py3-none-any.whl", hash = "sha256:ec532c484d67240ad8d522bdff2e72d1bb1370eb1bc21ed46135ba963add5f36", size = 784231, upload-time = "2026-04-20T17:00:05.511Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/60/af15bde63fa485e8a6927a2697bbff58934a2a962942d8ed6a75153f99a4/crewai_tools-1.14.3a2-py3-none-any.whl", hash = "sha256:23880c20237c293c915077535cb76087b05389dce9b7ce37c568c0e8027f1093", size = 793522, upload-time = "2026-04-21T19:14:59.75Z" },
 ]
 
 [[package]]
@@ -2831,11 +2831,11 @@ wheels = [
 
 [[package]]
 name = "python-dotenv"
-version = "1.1.1"
+version = "1.2.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f6/b0/4bc07ccd3572a2f9df7e6782f52b0c6c90dcbb803ac4a167702d7d0dfe1e/python_dotenv-1.1.1.tar.gz", hash = "sha256:a8a6399716257f45be6a007360200409fce5cda2661e3dec71d23dc15f6189ab", size = 41978, upload-time = "2025-06-24T04:21:07.341Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/ed/0301aeeac3e5353ef3d94b6ec08bbcabd04a72018415dcb29e588514bba8/python_dotenv-1.2.2.tar.gz", hash = "sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3", size = 50135, upload-time = "2026-03-01T16:00:26.196Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5f/ed/539768cf28c661b5b068d66d96a2f155c4971a5d55684a514c1a0e0dec2f/python_dotenv-1.1.1-py3-none-any.whl", hash = "sha256:31f23644fe2602f88ff55e1f5c79ba497e01224ee7737937930c448e4d0e24dc", size = 20556, upload-time = "2025-06-24T04:21:06.073Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/d7/1959b9648791274998a9c3526f6d0ec8fd2233e4d4acce81bbae76b44b2a/python_dotenv-1.2.2-py3-none-any.whl", hash = "sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a", size = 22101, upload-time = "2026-03-01T16:00:25.09Z" },
 ]
 
 [[package]]
@@ -3246,7 +3246,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "crewai", extras = ["google-genai", "tools"], specifier = "==1.14.3a1" },
+    { name = "crewai", extras = ["google-genai", "tools"], specifier = "==1.14.3a2" },
     { name = "flask" },
     { name = "gunicorn" },
     { name = "python-dotenv" },
