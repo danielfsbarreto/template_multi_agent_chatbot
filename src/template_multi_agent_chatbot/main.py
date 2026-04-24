@@ -3,7 +3,11 @@
 from crewai.flow import Flow, listen, or_, persist, router, start
 
 from template_multi_agent_chatbot.agents import MessageClassifierAgent
-from template_multi_agent_chatbot.crews import ImageCreationCrew, InternetSearchCrew
+from template_multi_agent_chatbot.crews import (
+    CrewaiDocsCrew,
+    ImageCreationCrew,
+    InternetSearchCrew,
+)
 from template_multi_agent_chatbot.events import ConversationalEventBus
 from template_multi_agent_chatbot.types import ConversationalState
 
@@ -45,7 +49,22 @@ class ConversationalFlow(Flow[ConversationalState]):
             source=self.handle_internet_search,
         ).execute()
 
-    @listen(or_(handle_simple_message, handle_image_creation, handle_internet_search))
+    @listen("CREWAI_DOCS")
+    def handle_crewai_docs(self):
+        CrewaiDocsCrew(
+            messages=self.state.messages,
+            event_bus=self.event_bus,
+            source=self.handle_crewai_docs,
+        ).execute()
+
+    @listen(
+        or_(
+            handle_simple_message,
+            handle_image_creation,
+            handle_internet_search,
+            handle_crewai_docs,
+        )
+    )
     def finalize(self):
         return self.state.model_dump()
 
@@ -55,9 +74,10 @@ def kickoff():
         inputs={
             "user_message": {
                 "role": "user",
-                "content": "Hello, how are you?",  # SIMPLE ROUTE
+                # "content": "Hello, how are you?",  # SIMPLE ROUTE
                 # "content": "Generate an image of an otter playing with a ball", # IMAGE ROUTE
                 # "content": "Do a quick search about retro emulation", # SEARCH ROUTE
+                "content": "How do I create a crew with custom tools in CrewAI?",  # CREWAI DOCS ROUTE
             },
         }
     )
