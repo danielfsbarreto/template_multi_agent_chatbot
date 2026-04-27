@@ -26,14 +26,15 @@ A conversational chatbot built with [CrewAI Flows](https://docs.crewai.com), dep
 `ConversationalFlow` is a CrewAI `Flow[ConversationalState]` with two steps:
 
 
-| Step                   | Decorator                                                                    | What it does                                                                                               |
-| ---------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `load_initial_context` | `@start()`                                                                   | Registers the event listener and appends the new user message to state.                                    |
-| `classify_message`     | `@router(load_initial_context)`                                              | Runs `MessageClassifierAgent` to determine intent ("SIMPLE", "IMAGE_CREATION_UPDATE", "INTERNET_SEARCH").  |
-| `handle_image_creation`| `@listen("IMAGE_CREATION_UPDATE")`                                           | Instantiates and executes the `ImageCreationCrew`.                                                         |
-| `handle_internet_search`| `@listen("INTERNET_SEARCH")`                                                | Instantiates and executes the `InternetSearchCrew`.                                                        |
-| `handle_simple_message`| `@listen("SIMPLE")`                                                          | No-op, the classifier handles direct responses for simple queries.                                         |
-| `finalize`             | `@listen(or_(handle_simple_message, handle_image_creation, handle_internet_search))` | Returns the serialized state to finish the flow.                                                           |
+| Step                   | Decorator                                                                    | What it does                                                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `load_initial_context` | `@start()`                                                                   | Registers the event listener and appends the new user message to state.                                                  |
+| `classify_message`     | `@router(load_initial_context)`                                              | Runs `MessageClassifierAgent` to determine intent ("SIMPLE", "IMAGE_CREATION_UPDATE", "INTERNET_SEARCH", "CREWAI_DOCS"). |
+| `handle_image_creation`| `@listen("IMAGE_CREATION_UPDATE")`                                           | Instantiates and executes the `ImageCreationCrew`.                                                                       |
+| `handle_internet_search`| `@listen("INTERNET_SEARCH")`                                                | Instantiates and executes the `InternetSearchCrew`.                                                                      |
+| `handle_crewai_docs`  | `@listen("CREWAI_DOCS")`                                                     | Instantiates and executes the `CrewaiDocsCrew`.                                                                           |
+| `handle_simple_message`| `@listen("SIMPLE")`                                                          | No-op, the classifier handles direct responses for simple queries.                                                       |
+| `finalize`             | `@listen(or_(handle_simple_message, handle_image_creation, handle_internet_search, handle_crewai_docs))` | Returns the serialized state to finish the flow.                                             |
 
 The flow is decorated with `@persist()`, which automatically saves and restores `ConversationalState` across kickoffs using the flow state's `id` (a UUID passed by the UI as the conversation identifier). State fields: `user_message` and `messages` (the full conversation history, accumulated over time).
 
@@ -42,7 +43,7 @@ The flow is decorated with `@persist()`, which automatically saves and restores 
 **`agents/message_classifier_agent.py`**
 - **Agent**: `Message Classifier` powered by `gemini/gemini-3.1-flash-lite-preview`.
 - **Skills**: `skills/` (discovers `user-communication` and other relevant skills).
-- **Role**: Triage the request, emit a quick "routing" acknowledgement using `SendMessageToUserTool`, and return a `ClassificationResult` which controls the Flow router. If the request is simple, it answers the user directly via the tool.
+- **Role**: Triage the request, emit a quick "routing" acknowledgement, and return a `ClassificationResult` which controls the Flow router. If the request is simple, it answers the user directly. Questions about the CrewAI framework are always routed to `CREWAI_DOCS`.
 
 ### Crews
 
@@ -56,14 +57,20 @@ The flow is decorated with `@persist()`, which automatically saves and restores 
 - **Skills**: `skills/user-communication`, `skills/internet-searching`.
 - **Task**: Formulate search queries, evaluate findings, and synthesize clear answers with sources using the `SendMessageToUserTool`.
 
+**`crews/crewai_docs_crew.py`**
+- **Agent**: `CrewAI Documentation Expert` powered by `gemini/gemini-3.1-pro-preview`, equipped with a MongoDB vector search tool over the official CrewAI docs.
+- **Skills**: `skills/crewai-docs`.
+- **Task**: Search the docs vector database for relevant sections and synthesize accurate, detailed answers with code examples when appropriate.
+
 ### Tools
 
 
 | Tool                                  | Description                                                                                                                                      |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `SendMessageToUserTool`               | Appends the agent's reply to flow state. Content reaches the user via `llm_stream_chunk` events and is persisted on `tool_usage_finished`.        |
+| `SendMessageToUserTool`               | Appends the agent's reply to flow state. Content reaches the user via `llm_stream_chunk` events and is persisted on `tool_usage_finished`.       |
 | `NanoBananaImageGenerationTool`       | Generates an image via Gemini (`gemini-3.1-flash-image-preview`), emits an `ImageGenerated` (base64) event.                                      |
 | `NanoBananaImageEditingTool`          | Edits an existing image via Gemini with a text prompt, same event pattern as generation.                                                         |
+| `MongoDBVectorSearchTool`             | Searches the CrewAI documentation stored in a MongoDB Atlas vector index.                                                                        |
 | `SerperDevTool` / `ScrapeWebsiteTool` | Web search and scraping (from `crewai_tools`).                                                                                                   |
 
 
@@ -75,18 +82,18 @@ The event system is the bridge between the CrewAI agent running in AMP and the e
 
 - `ImageGenerated` — carries `result.image` (base64-encoded PNG).
 
-`**ConversationalEventBus`** (`events/conversational_event_bus.py`):
+`ConversationalEventBus` (`events/conversational_event_bus.py`):
 
 - Wraps the CrewAI event bus. Tools call `append_message()` / `emit_image_generated()` on it.
 - Appends messages to flow state (persisted automatically by `@persist()`).
 
-`**ConversationalEventListener**` (`events/listeners/conversational_event_listener.py`):
+`ConversationalEventListener` (`events/listeners/conversational_event_listener.py`):
 
 - A `BaseEventListener` that subscribes to `ImageGenerated`, `LLMStreamChunkEvent`, `LLMThinkingChunkEvent`, `FlowFinishedEvent`, `ToolUsageStartedEvent`, `ToolUsageFinishedEvent`, and `ToolUsageErrorEvent`.
 - Stamps each event with `source_fingerprint` and `fingerprint_metadata.conversation_id`.
 - Dispatches every event to the external webhook via the `Dispatcher` client.
 
-`**Dispatcher**` (`events/clients/dispatcher.py`):
+`Dispatcher` (`events/clients/dispatcher.py`):
 
 - Simple HTTP POST client that sends JSON event payloads to `DISPATCHER_URL` (webhook.site) with bearer auth.
 
@@ -106,14 +113,17 @@ Flask app with a Discord-inspired dark theme.
 
 1. Copy `.env.example` to `.env` and fill in the keys:
 
-  | Key                 | Purpose                                                  |
-  | ------------------- | -------------------------------------------------------- |
-  | `GEMINI_API_KEY`    | LLM (classifier, crews) and image generation / editing   |
-  | `SERPER_API_KEY`    | Web search via Serper                                    |
-  | `DISPATCHER_URL`    | Webhook.site endpoint for event forwarding               |
-  | `DISPATCHER_KEY`    | Bearer token for the dispatcher                          |
-  | `DEPLOYMENT_URL`    | CrewAI AMP deployment URL                                |
-  | `DEPLOYMENT_KEY`    | CrewAI AMP API key                                       |
+  | Key                 | Purpose                                                        |
+  | ------------------- | --------------------------------------------------------       |
+  | `GEMINI_API_KEY`    | LLM (classifier, crews) and image generation / editing         |
+  | `SERPER_API_KEY`    | Web search via Serper                                          |
+  | `MONGODB_CONNECTION_STRING` | MongoDB Atlas connection string for docs vector search |
+  | `MONGODB_DATABASE_NAME`    | MongoDB database name                                   |
+  | `MONGODB_COLLECTION_NAME`  | MongoDB collection name                                 |
+  | `DISPATCHER_URL`    | Webhook.site endpoint for event forwarding                     |
+  | `DISPATCHER_KEY`    | Bearer token for the dispatcher                                |
+  | `DEPLOYMENT_URL`    | CrewAI AMP deployment URL                                      |
+  | `DEPLOYMENT_KEY`    | CrewAI AMP API key                                             |
 
 2. Deploy the flow to CrewAI AMP:
   ```bash
