@@ -46,6 +46,21 @@ _sse_subscribers: dict[str, list[queue.Queue]] = {}
 _sse_lock = threading.Lock()
 
 _active_thinking: dict[str, dict] = {}  # conv_id → {call_id, text}
+_active_responses: dict[str, dict] = {}  # conv_id → {call_id, text, agent_role, channel_id}
+
+
+def _persist_response(conversation_id: str):
+    """Flush the accumulated response text for a conversation to the DB."""
+    ar = _active_responses.pop(conversation_id, None)
+    if ar and ar["text"].strip():
+        db.add_message(
+            ar["channel_id"],
+            role="assistant",
+            content=ar["text"],
+            event_type="assistant_message",
+            event_id=f"stream:{ar['call_id']}",
+            agent_role=ar.get("agent_role"),
+        )
 
 
 def _parse_dt(val) -> float:
@@ -321,22 +336,45 @@ def webhook():
 
     if event_type == "flow_finished":
         _active_thinking.pop(conversation_id, None)
+        _persist_response(conversation_id)
         _broadcast_to_channel(
             channel_id,
             {"type": "flow_finished", "seq": emission_sequence},
         )
 
     elif event_type == "llm_stream_chunk":
+        call_id = payload.get("call_id")
+        chunk_text = payload.get("chunk", "")
+        agent_role = payload.get("agent_role", "")
+
+        if not payload.get("tool_call") and chunk_text:
+            ar = _active_responses.get(conversation_id)
+            if ar and ar["call_id"] != call_id:
+                _persist_response(conversation_id)
+                ar = None
+            if ar is None and conversation_id not in _active_responses:
+                is_structured = chunk_text.lstrip().startswith(("{", "["))
+                _active_responses[conversation_id] = {
+                    "call_id": call_id,
+                    "text": "",
+                    "agent_role": agent_role,
+                    "channel_id": channel_id,
+                    "structured": is_structured,
+                }
+            ar = _active_responses.get(conversation_id)
+            if ar and not ar.get("structured"):
+                ar["text"] += chunk_text
+
         _broadcast_to_channel(
             channel_id,
             {
                 "type": "llm_stream_chunk",
-                "call_id": payload.get("call_id"),
+                "call_id": call_id,
                 "response_id": payload.get("response_id"),
                 "chunk": payload.get("chunk"),
                 "tool_call": payload.get("tool_call"),
                 "call_type": payload.get("call_type"),
-                "agent_role": payload.get("agent_role", ""),
+                "agent_role": agent_role,
                 "seq": emission_sequence,
             },
         )
@@ -373,7 +411,7 @@ def webhook():
 
     elif event_type == "tool_usage_started":
         tool_name = payload.get("tool_name", "")
-        if tool_name not in ("structured_output", "send_message_to_user"):
+        if tool_name != "structured_output":
             _broadcast_to_channel(
                 channel_id,
                 {
@@ -390,31 +428,6 @@ def webhook():
 
         if tool_name == "structured_output":
             pass
-
-        elif tool_name == "send_message_to_user":
-            tool_args = payload.get("tool_args", {})
-            if isinstance(tool_args, str):
-                try:
-                    tool_args = json.loads(tool_args)
-                except (json.JSONDecodeError, TypeError):
-                    tool_args = {}
-            content = (
-                tool_args.get("content", "") if isinstance(tool_args, dict) else ""
-            )
-            if content:
-                db.add_message(
-                    channel_id,
-                    role="assistant",
-                    content=content,
-                    event_type="assistant_message",
-                    event_id=event_id,
-                    agent_role=agent_role,
-                )
-                app.logger.info(
-                    "send_message_to_user persisted (%d chars) conv=%s",
-                    len(content),
-                    conversation_id[:12],
-                )
 
         elif tool_name:
             start_ts = _parse_dt(payload.get("started_at"))
@@ -448,7 +461,7 @@ def webhook():
 
     elif event_type == "tool_usage_error":
         tool_name = payload.get("tool_name", "")
-        if tool_name not in ("structured_output", "send_message_to_user"):
+        if tool_name != "structured_output":
             error_msg = str(payload.get("error", "Unknown error"))
             _broadcast_to_channel(
                 channel_id,

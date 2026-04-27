@@ -16,6 +16,7 @@
   let thinkingCallId = null;
   let thinkingElement = null;
   let thinkingBuffer = "";
+  let thinkingWordCount = 0;
 
   // ---------------------------------------------------------------------------
   // DOM refs
@@ -107,6 +108,7 @@
     thinkingCallId = null;
     thinkingElement = null;
     thinkingBuffer = "";
+    thinkingWordCount = 0;
     renderChannelList();
     triggerWakeup();
 
@@ -297,48 +299,81 @@
     $messages.querySelectorAll(".cursor-active").forEach((e) => e.classList.remove("cursor-active"));
   }
 
-  function streamKey(data) {
-    if (data.tool_call?.id) return data.call_id + ":" + data.tool_call.id;
-    return data.call_id;
-  }
-
   function handleStreamChunk(data) {
     const { call_id, chunk, tool_call, agent_role, response_id } = data;
     if (!call_id || !chunk) return;
 
-    const toolName = tool_call?.function?.name;
-    const isSendMessage = toolName === "send_message_to_user";
-    const isToolCall = !!tool_call;
+    if (tool_call) return;
 
-    // Only stream send_message_to_user into the UI.
-    // Plain text chunks are internal LLM reasoning (duplicates the tool content).
-    // Other tool calls are handled by tool_usage_started/finished events.
-    if (!isToolCall) return;
-    if (!isSendMessage) return;
-
-    setTyping(false);
-
-    const key = streamKey(data);
+    const key = call_id;
     let stream = activeStreams.get(key);
 
     if (!stream) {
+      const isStructuredOutput = chunk.trimStart().startsWith("{") || chunk.trimStart().startsWith("[");
+      if (isStructuredOutput) {
+        activeStreams.set(key, { structured: true });
+        return;
+      }
+
+      setTyping(false);
       const el = createStreamingBubble(agent_role);
       const contentEl = el.querySelector(".message-content");
       stream = {
         element: el, contentEl,
-        contentBuffer: "", argsBuffer: "",
-        agentRole: agent_role, toolName: toolName, callId: call_id,
-        responseId: response_id, type: "message",
+        contentBuffer: "",
+        wordCount: 0,
+        agentRole: agent_role, callId: call_id,
+        responseId: response_id,
         startTime: Date.now(),
       };
       activeStreams.set(key, stream);
     }
 
-    stream.argsBuffer += chunk;
-    stream.contentBuffer = extractSendMessageContent(stream.argsBuffer);
+    if (stream.structured) return;
+
+    setTyping(false);
+    stream.contentBuffer += chunk;
 
     if (stream.contentEl && stream.contentBuffer) {
       stream.contentEl.innerHTML = marked.parse(stream.contentBuffer, { breaks: true });
+
+      const walker = document.createTreeWalker(stream.contentEl, NodeFilter.SHOW_TEXT);
+      const textNodes = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+      let wordIdx = 0;
+      let newWordIdx = 0;
+
+      for (const node of textNodes) {
+        const text = node.textContent;
+        if (!text) continue;
+
+        const tokens = text.split(/(\s+)/);
+        const fragment = document.createDocumentFragment();
+
+        for (const token of tokens) {
+          if (!token) continue;
+          if (/^\s+$/.test(token)) {
+            fragment.appendChild(document.createTextNode(token));
+          } else {
+            const span = document.createElement("span");
+            if (wordIdx < stream.wordCount) {
+              span.className = "stream-word-done";
+            } else {
+              span.className = "stream-word";
+              span.style.animationDelay = `${newWordIdx * 25}ms`;
+              newWordIdx++;
+            }
+            span.textContent = token;
+            fragment.appendChild(span);
+            wordIdx++;
+          }
+        }
+
+        node.parentNode.replaceChild(fragment, node);
+      }
+
+      stream.wordCount = wordIdx;
       setCursorOn(stream.contentEl);
     }
     scrollToBottom();
@@ -354,13 +389,53 @@
     if (call_id !== thinkingCallId) {
       thinkingCallId = call_id;
       thinkingBuffer = "";
+      thinkingWordCount = 0;
       thinkingElement = createStreamingBubble(agent_role || "CrewAI");
       thinkingElement.classList.add("thinking");
       if (!showThinking) thinkingElement.classList.add("hidden");
     }
     thinkingBuffer += chunk;
+
     const contentEl = thinkingElement.querySelector(".message-content");
     contentEl.innerHTML = marked.parse(thinkingBuffer, { breaks: true });
+
+    const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+    let wordIdx = 0;
+    let newWordIdx = 0;
+
+    for (const node of textNodes) {
+      const text = node.textContent;
+      if (!text) continue;
+
+      const tokens = text.split(/(\s+)/);
+      const fragment = document.createDocumentFragment();
+
+      for (const token of tokens) {
+        if (!token) continue;
+        if (/^\s+$/.test(token)) {
+          fragment.appendChild(document.createTextNode(token));
+        } else {
+          const span = document.createElement("span");
+          if (wordIdx < thinkingWordCount) {
+            span.className = "think-word-done";
+          } else {
+            span.className = "think-word";
+            span.style.animationDelay = `${newWordIdx * 30}ms`;
+            newWordIdx++;
+          }
+          span.textContent = token;
+          fragment.appendChild(span);
+          wordIdx++;
+        }
+      }
+
+      node.parentNode.replaceChild(fragment, node);
+    }
+
+    thinkingWordCount = wordIdx;
     contentEl.scrollTop = contentEl.scrollHeight;
     scrollToBottom();
   }
@@ -444,6 +519,7 @@
     thinkingCallId = null;
     thinkingElement = null;
     thinkingBuffer = "";
+    thinkingWordCount = 0;
     scrollToBottom();
   }
 
@@ -451,24 +527,6 @@
     if (stream.contentEl) {
       stream.contentEl.classList.remove("streaming", "cursor-active");
       if (!stream.contentBuffer) stream.contentEl.style.display = "none";
-    }
-  }
-
-  function extractSendMessageContent(buffer) {
-    try {
-      const parsed = JSON.parse(buffer);
-      return parsed.content || "";
-    } catch {
-      const match = buffer.match(/"content"\s*:\s*"/);
-      if (!match) return "";
-      const start = match.index + match[0].length;
-      let text = buffer.slice(start);
-      text = text.replace(/"\s*\}?\s*$/, "");
-      return text
-        .replace(/\\n/g, "\n")
-        .replace(/\\"/g, '"')
-        .replace(/\\u([0-9a-fA-F]{4})/g, (_, cp) => String.fromCharCode(parseInt(cp, 16)))
-        .replace(/\\\\/g, "\\");
     }
   }
 
