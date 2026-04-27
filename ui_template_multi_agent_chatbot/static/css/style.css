@@ -675,6 +675,25 @@ html, body {
 }
 
 /* ============================================================
+   Streaming word typewriter
+   ============================================================ */
+
+.stream-word,
+.stream-word-done {
+  display: inline;
+}
+
+.stream-word {
+  opacity: 0;
+  animation: stream-word-in 0.2s ease-out forwards;
+}
+
+@keyframes stream-word-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ============================================================
    Streaming cursor
    ============================================================ */
 
@@ -705,6 +724,21 @@ html, body {
   font-style: italic;
   max-height: 120px;
   overflow-y: auto;
+}
+
+.think-word,
+.think-word-done {
+  display: inline;
+}
+
+.think-word {
+  opacity: 0;
+  animation: think-word-fade 0.35s ease-out forwards;
+}
+
+@keyframes think-word-fade {
+  from { opacity: 0; filter: blur(4px); transform: translateY(2px); }
+  to   { opacity: 1; filter: blur(0);  transform: translateY(0); }
 }
 
 /* ============================================================

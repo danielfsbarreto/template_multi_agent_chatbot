@@ -1,59 +1,74 @@
-from pathlib import Path
-from typing import Any
-
 from crewai import LLM, Agent
 
-from template_multi_agent_chatbot.events import ConversationalEventBus
-from template_multi_agent_chatbot.tools import SendMessageToUserTool
 from template_multi_agent_chatbot.types import ClassificationResult, Message
 
-_SKILLS_PATH = str(
-    Path(__file__).resolve().parent.parent / "skills" / "user-communication"
-)
+_LLM = LLM(model="gemini/gemini-3.1-flash-lite-preview", stream=True)
+
+_ROUTE_DESCRIPTIONS = {
+    "IMAGE_CREATION_UPDATE": "image creation",
+    "INTERNET_SEARCH": "web search",
+    "CREWAI_DOCS": "CrewAI documentation lookup",
+}
 
 
 class MessageClassifierAgent:
-    def __init__(
-        self,
-        messages: list[Message],
-        event_bus: ConversationalEventBus,
-        source: Any,
-    ):
+    def __init__(self, messages: list[Message]):
         self._messages = messages
-        self._event_bus = event_bus
-        self._source = source
 
-    def _agent(self) -> Agent:
-        return Agent(
-            role="Message Classifier",
-            goal="""Classify the user's message intent. If the request needs to be routed to specialized agents (like image creation, internet search, or CrewAI documentation questions), use the Send Message to User tool to briefly acknowledge the request and let the user know it is being routed to the right experts.
-Keep these routing messages natural, varied, and highly contextual to the user's specific request to avoid sounding robotic or repetitive in long chats. Carefully assess the conversation history to ensure you never repeat greetings, phrases, or acknowledgements you have already used. If the request is simple, answer the user directly via the Send Message to User tool.
+    def execute(self) -> tuple[str, str]:
+        messages = [
+            {"role": msg.role, "content": msg.content} for msg in self._messages[-10:]
+        ]
+
+        classification = self._classify(messages)
+        response = self._respond(messages, classification)
+
+        return classification, response
+
+    # -- Step 1: structured output → JSON, filtered from streaming ----------------
+
+    def _classify(self, messages: list[dict]) -> str:
+        return (
+            Agent(
+                role="Message Classifier",
+                goal="Classify the user's message intent into exactly one route.",
+                backstory="""You are a triage agent that reads conversation history and picks the right route.
+CRITICAL: When the user asks anything about CrewAI (the framework), always classify as CREWAI_DOCS — never SIMPLE or INTERNET_SEARCH.
 
 ROUTING GUIDE:
 - CREWAI_DOCS: Any question about CrewAI — the framework, its Python API, agents, tasks, crews, flows, tools, pipelines, deployments, configuration, or how to build with CrewAI.
 - IMAGE_CREATION_UPDATE: Requests to generate or edit images.
 - INTERNET_SEARCH: Questions requiring up-to-date web information, current events, or facts that may have changed.
 - SIMPLE: Greetings, small talk, or general questions you can answer directly without specialized tools.""",
-            backstory="""You are a conversational triage agent. You read the conversation history, determine the user's intent, and ensure the user feels heard. When you need to route a request, you send a quick, human-like acknowledgement before doing so. You pride yourself on conversational variety and never using the same canned response twice.
-CRITICAL: You must respond solely in the same language the user is using.
-CRITICAL: When the user asks anything about CrewAI (the framework), always classify as CREWAI_DOCS — never SIMPLE or INTERNET_SEARCH.""",
-            llm=LLM(model="gemini/gemini-3.1-flash-lite-preview", stream=True),
-            skills=[_SKILLS_PATH],
-            tools=[
-                SendMessageToUserTool(
-                    event_bus=self._event_bus,
-                ),
-            ],
+                llm=_LLM,
+            )
+            .kickoff(messages=messages, response_format=ClassificationResult)
+            .pydantic.classification
         )
 
-    def execute(self) -> ClassificationResult:
-        messages = [
-            {"role": msg.role, "content": msg.content} for msg in self._messages[-10:]
-        ]
+    # -- Step 2: plain text → streamed live to UI ---------------------------------
 
-        result = self._agent().kickoff(
-            messages=messages,
-            response_format=ClassificationResult,
+    def _respond(self, messages: list[dict], classification: str) -> str:
+        label = _ROUTE_DESCRIPTIONS.get(classification, "direct conversation")
+        instruction = (
+            f"The user's request has been classified as: {classification} ({label}). "
+            "Write a natural, context-aware response to the user. "
+            "If the request is simple (greetings, small talk, general knowledge), answer it directly. "
+            "If it will be handled by a specialized agent, briefly acknowledge the request and "
+            "let them know the right agents are being selected to help. "
+            "Keep routed acknowledgments short (1-2 sentences). "
+            "Vary your phrasing — never repeat the same canned response."
         )
 
-        return result.pydantic
+        return (
+            Agent(
+                role="Message Classifier",
+                goal=instruction,
+                backstory="""You are a conversational agent. Your text output is streamed live to the user in real time.
+Carefully assess the conversation history to avoid repeating greetings, phrases, or acknowledgements.
+CRITICAL: You must respond solely in the same language the user is using.""",
+                llm=_LLM,
+            )
+            .kickoff(messages=messages)
+            .raw
+        )

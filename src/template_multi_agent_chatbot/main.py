@@ -9,7 +9,7 @@ from template_multi_agent_chatbot.crews import (
     InternetSearchCrew,
 )
 from template_multi_agent_chatbot.events import ConversationalEventBus
-from template_multi_agent_chatbot.types import ConversationalState
+from template_multi_agent_chatbot.types import ConversationalState, Message
 
 
 @persist()
@@ -21,13 +21,13 @@ class ConversationalFlow(Flow[ConversationalState]):
 
     @router(load_initial_context)
     def classify_message(self):
-        result = MessageClassifierAgent(
+        classification, response = MessageClassifierAgent(
             messages=self.state.messages,
-            event_bus=self.event_bus,
-            source=self.classify_message,
         ).execute()
 
-        return result.classification
+        self.state.messages.append(Message(role="assistant", content=response))
+
+        return classification
 
     @listen("SIMPLE")
     def handle_simple_message(self):
@@ -35,27 +35,38 @@ class ConversationalFlow(Flow[ConversationalState]):
 
     @listen("IMAGE_CREATION_UPDATE")
     def handle_image_creation(self):
-        ImageCreationCrew(
-            messages=self.state.messages,
-            event_bus=self.event_bus,
-            source=self.handle_image_creation,
-        ).execute()
+        message = Message(
+            role="assistant",
+            content=ImageCreationCrew(
+                messages=self.state.messages,
+                event_bus=self.event_bus,
+                source=self.handle_image_creation,
+            ).execute(),
+        )
+        self.state.messages.append(message)
+        return message
 
     @listen("INTERNET_SEARCH")
     def handle_internet_search(self):
-        InternetSearchCrew(
-            messages=self.state.messages,
-            event_bus=self.event_bus,
-            source=self.handle_internet_search,
-        ).execute()
+        message = Message(
+            role="assistant",
+            content=InternetSearchCrew(
+                messages=self.state.messages,
+            ).execute(),
+        )
+        self.state.messages.append(message)
+        return message
 
     @listen("CREWAI_DOCS")
     def handle_crewai_docs(self):
-        CrewaiDocsCrew(
-            messages=self.state.messages,
-            event_bus=self.event_bus,
-            source=self.handle_crewai_docs,
-        ).execute()
+        message = Message(
+            role="assistant",
+            content=CrewaiDocsCrew(
+                messages=self.state.messages,
+            ).execute(),
+        )
+        self.state.messages.append(message)
+        return message
 
     @listen(
         or_(
