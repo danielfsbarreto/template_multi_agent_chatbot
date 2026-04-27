@@ -2,7 +2,7 @@ from crewai import LLM, Agent
 
 from template_multi_agent_chatbot.types import ClassificationResult, Message
 
-_LLM = LLM(model="gemini/gemini-3.1-flash-lite-preview", stream=True)
+_LLM = LLM(model="gemini/gemini-3-flash-preview", stream=True)
 
 _ROUTE_DESCRIPTIONS = {
     "IMAGE_CREATION_UPDATE": "image creation",
@@ -53,9 +53,9 @@ ROUTING GUIDE:
         instruction = (
             f"The user's request has been classified as: {classification} ({label}). "
             "Write a natural, context-aware response to the user. "
-            "If the request is simple (greetings, small talk, general knowledge), answer it directly. "
-            "If it will be handled by a specialized agent, briefly acknowledge the request and "
-            "let them know the right agents are being selected to help. "
+            "If the request was classified as simple (greetings, small talk), answer it directly. "
+            "Otherwise, it will be handled by a specialized agent. Therefore, briefly acknowledge "
+            "the request and let them know the right agents are being selected to help. "
             "Keep routed acknowledgments short (1-2 sentences). "
             "Vary your phrasing — never repeat the same canned response."
         )

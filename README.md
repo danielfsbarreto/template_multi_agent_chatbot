@@ -41,7 +41,7 @@ The flow is decorated with `@persist()`, which automatically saves and restores 
 ### Classification & Routing
 
 **`agents/message_classifier_agent.py`**
-- **Agent**: `Message Classifier` powered by `gemini/gemini-3.1-flash-lite-preview`.
+- **Agent**: `Message Classifier` powered by `gemini/gemini-3-flash-preview`.
 - **Skills**: `skills/` (discovers `user-communication` and other relevant skills).
 - **Role**: Triage the request, emit a quick "routing" acknowledgement, and return a `ClassificationResult` which controls the Flow router. If the request is simple, it answers the user directly. Questions about the CrewAI framework are always routed to `CREWAI_DOCS`.
 
