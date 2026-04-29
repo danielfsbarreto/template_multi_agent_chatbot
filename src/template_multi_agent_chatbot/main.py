@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from typing import Literal
+
 from crewai.flow import Flow, listen, or_, persist, router, start
 
 from template_multi_agent_chatbot.agents import MessageClassifierAgent
@@ -20,7 +22,9 @@ class ConversationalFlow(Flow[ConversationalState]):
         self.state.messages.append(self.state.user_message)
 
     @router(load_initial_context)
-    def classify_message(self):
+    def classify_message(
+        self,
+    ) -> Literal["SIMPLE", "IMAGE_CREATION_UPDATE", "INTERNET_SEARCH", "CREWAI_DOCS"]:
         classification, response = MessageClassifierAgent(
             messages=self.state.messages,
         ).execute()
