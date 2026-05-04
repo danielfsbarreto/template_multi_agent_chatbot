@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 
+import os
 from typing import Literal
 
+from arize.otel import register
 from crewai.flow import Flow, listen, or_, persist, router, start
+from openinference.instrumentation.crewai import CrewAIInstrumentor
 
 from template_multi_agent_chatbot.agents import MessageClassifierAgent
 from template_multi_agent_chatbot.crews import (
@@ -12,6 +15,13 @@ from template_multi_agent_chatbot.crews import (
 )
 from template_multi_agent_chatbot.events import ConversationalEventBus
 from template_multi_agent_chatbot.types import ConversationalState, Message
+
+tracer_provider = register(
+    api_key=os.getenv("ARIZE_API_KEY"),
+    project_name=os.getenv("ARIZE_PROJECT_NAME"),
+    space_id=os.getenv("ARIZE_SPACE_ID"),
+)
+CrewAIInstrumentor().instrument(tracer_provider=tracer_provider)
 
 
 @persist()
